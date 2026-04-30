@@ -34,3 +34,4 @@ anti_aliasing/quality/msaa_3d=2
 
 openxr/enabled=true
 openxr/default_action_map="res://default_action_map.tres"
+hybrid_app/enabled=true
