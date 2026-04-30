@@ -1,0 +1,40 @@
+[gd_scene load_steps=5 format=3 uid="uid://b4hdoj5avmy5l"]
+
+[ext_resource type="Script" path="res://Scripts/VRPlayer.cs" id="1"]
+[ext_resource type="Script" path="res://Scripts/Services/HeadTrackerService.cs" id="2"]
+[ext_resource type="PackedScene" path="res://Scenes/VrOverlay.tscn" id="3"]
+
+[sub_resource type="Environment" id="Environment_8a7f3b2"]
+background_color = Color(0.0, 0.0, 0.0, 1)
+background_mode = 1
+tonemap_mode = 0
+glow_enabled = false
+
+[node name="VRPlayer" type="Node3D"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_8a7f3b2")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+current = true
+far = 1000.0
+near = 0.01
+
+[node name="SphereMesh" type="MeshInstance3D" parent="."]
+visible = true
+
+[node name="FlatMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -5)
+visible = false
+
+[node name="HeadTracker" type="Node" parent="."]
+script = ExtResource("2")
+
+[node name="VrOverlay" parent="." instance=ExtResource("3")]
+
+[node name="DebugLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
+pixel_size = 0.005
+text = "VR Player Ready"
+modulate = Color(1, 1, 1, 0.5)

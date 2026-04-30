@@ -1,0 +1,35 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="VR Player Project"
+config/description="VR video player with Funscript support. Supports 360°, SBS, OU video formats with head tracking, funscript sync, serial/WebSocket output."
+run/main_scene="uid://dq0xqry2dcqoa"
+config/features=PackedStringArray("4.6", "C#", "Mobile")
+config/icon="res://icon.svg"
+
+[dotnet]
+
+project/assembly_name="VRPlayerProject"
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+renderer/rendering_method="mobile"
+anti_aliasing/quality/msaa_3d=2
+
+[xr]
+
+openxr/enabled=true
+openxr/default_action_map="res://default_action_map.tres"
