@@ -1,14 +1,14 @@
 <Project Sdk="Godot.NET.Sdk/4.6.1">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>VRPlayerProject</RootNamespace>
-    <AssemblyName>VRPlayerProject</AssemblyName>
+    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);android\**</DefaultItemExcludes>
+    <DefineConstants Condition=" '$(GodotTargetPlatform)' == 'android' ">$(DefineConstants);ANDROID</DefineConstants>
   </PropertyGroup>
-
-  <ItemGroup Condition="'$([System.OperatingSystem]::IsWindows())'">
-    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  <ItemGroup Condition=" '$(GodotTargetPlatform)' != 'android' ">
+    <PackageReference Include="System.IO.Ports" Version="9.0.0" />
   </ItemGroup>
 </Project>

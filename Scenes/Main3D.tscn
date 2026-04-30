@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3 uid="uid://c3dmain6k0x12"]
+
+[ext_resource type="Script" path="res://Scripts/UI/VrPanel3D.cs" id="1"]
+[ext_resource type="PackedScene" uid="uid://dq0xqry2dcqoa" path="res://Scenes/Main.tscn" id="2"]
+
+[node name="Main3D" type="Node3D"]
+script = ExtResource("1")
+panel_world_size = Vector2(4.0, 2.5)
+viewport_resolution = Vector2i(1280, 800)
+distance_from_camera = 3.5
+follow_camera = true
+billboard = true
+content_scene = ExtResource("2")
+
+[node name="XROrigin3D" type="XROrigin3D" parent="."]
+
+[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D"]
+current = true
+far = 1000.0
+near = 0.01
+
+[node name="XRController3DLeft" type="XRController3D" parent="XROrigin3D"]
+tracker = &"left_hand"
+
+[node name="XRController3DRight" type="XRController3D" parent="XROrigin3D"]
+tracker = &"right_hand"

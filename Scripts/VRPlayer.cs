@@ -13,6 +13,7 @@ public partial class VRPlayer : Node
     private OutputManager? _outputManager;
     private HeadTrackerService? _headTracker;
     private VrOverlay? _overlay;
+    private VrPanel3D? _uiPanel;
 
     private MeshInstance3D? _sphereMeshInstance;
     private MeshInstance3D? _flatMeshInstance;
@@ -51,11 +52,11 @@ public partial class VRPlayer : Node
         _funscriptPlayer = new FunscriptPlayerService();
 
         _headTracker = GetNodeOrNull<HeadTrackerService>("HeadTracker");
-        _overlay = GetNodeOrNull<VrOverlay>("VrOverlay");
+        _uiPanel = GetNodeOrNull<VrPanel3D>("VrPanel3D");
 
         _sphereMeshInstance = GetNodeOrNull<MeshInstance3D>("SphereMesh");
         _flatMeshInstance = GetNodeOrNull<MeshInstance3D>("FlatMesh");
-        _camera = GetNodeOrNull<Camera3D>("Camera3D");
+        _camera = GetNodeOrNull<Camera3D>("XROrigin3D/XRCamera3D");
         _debugLabel = GetNodeOrNull<Label3D>("DebugLabel");
 
         SetupSphereMesh();
@@ -64,11 +65,10 @@ public partial class VRPlayer : Node
 
         _videoManager?.SetupVideoPlayers(this);
 
-        SetupOverlayEvents();
+        SetupOverlay();
+
         SetupVideoEvents();
         SetupFunscriptEvents();
-
-        _overlay?.SetFormat(_currentFormat);
 
         if (_camera != null)
             _camera.Current = true;
@@ -78,6 +78,100 @@ public partial class VRPlayer : Node
 
         if (_scriptPath != null)
             _ = LoadScriptAsync(_scriptPath);
+    }
+
+    private void SetupOverlay()
+    {
+        if (_uiPanel == null) return;
+
+        var overlayScene = ResourceLoader.Load<PackedScene>("res://Scenes/VrOverlay.tscn");
+        if (overlayScene == null) return;
+
+        var overlayControl = overlayScene.Instantiate<Control>();
+        _uiPanel.SetContent(overlayControl);
+
+        _overlay = overlayControl as VrOverlay;
+        if (_overlay == null)
+            _overlay = overlayControl.GetNodeOrNull<VrOverlay>(".");
+
+        if (_overlay == null)
+        {
+            GD.PrintErr("[VRPlayer] Failed to get VrOverlay from instantiated scene.");
+            return;
+        }
+
+        _overlay.OnPlayPause += () =>
+        {
+            _videoManager?.TogglePlayPause();
+            _overlay.ResetHideTimer();
+        };
+
+        _overlay.OnStop += () =>
+        {
+            _videoManager?.Stop();
+            _funscriptPlayer?.SetActions(null);
+            GetTree().ChangeSceneToFile("res://Scenes/Main3D.tscn");
+        };
+
+        _overlay.OnBack += () =>
+        {
+            _videoManager?.Stop();
+            GetTree().ChangeSceneToFile("res://Scenes/Main3D.tscn");
+        };
+
+        _overlay.OnSeek += (ms) =>
+        {
+            _videoManager?.SeekTo(ms);
+            _funscriptPlayer?.SeekTo(ms);
+            _overlay.ResetHideTimer();
+        };
+
+        _overlay.OnSpeedChange += (speed) =>
+        {
+            _playbackSpeed = speed;
+            _videoManager?.SetSpeed(speed);
+            _funscriptPlayer?.SetSpeedFactor(speed);
+            _overlay.ResetHideTimer();
+        };
+
+        _overlay.OnFormatChange += (format) =>
+        {
+            SwitchFormat(format);
+            _overlay.ResetHideTimer();
+        };
+
+        _overlay.OnMaxPercentageChange += (value) =>
+        {
+            SetMaxPercentage(value);
+        };
+
+        _overlay.SetFormat(_currentFormat);
+    }
+
+    public void SwitchFormat(VideoFormat newFormat)
+    {
+        _currentFormat = newFormat;
+        _videoManager?.SwitchFormat(newFormat);
+
+        bool isSphere = newFormat != VideoFormat.Flat;
+        if (_sphereMeshInstance != null) _sphereMeshInstance.Visible = isSphere;
+        if (_flatMeshInstance != null) _flatMeshInstance.Visible = !isSphere;
+
+        _overlay?.SetFormat(newFormat);
+        _overlay?.ResetHideTimer();
+        _overlay?.UpdateState(
+            _videoManager?.State == PlaybackState.Playing,
+            _videoManager?.PositionMs ?? 0,
+            _videoManager?.DurationMs ?? 0,
+            _playbackSpeed
+        );
+    }
+
+    public void SetMaxPercentage(int value)
+    {
+        _maxPercentage = value;
+        _funscriptPlayer?.SetMaxPercentage(value);
+        _outputManager?.SetMaxPercentage(value);
     }
 
     private void SetupSphereMesh()
@@ -129,82 +223,6 @@ public partial class VRPlayer : Node
                 _videoManager?.SetFlatMaterial(flatMat);
             }
         }
-    }
-
-    public void SwitchFormat(VideoFormat newFormat)
-    {
-        _currentFormat = newFormat;
-        _videoManager?.SwitchFormat(newFormat);
-
-        bool isSphere = newFormat != VideoFormat.Flat;
-        if (_sphereMeshInstance != null) _sphereMeshInstance.Visible = isSphere;
-        if (_flatMeshInstance != null) _flatMeshInstance.Visible = !isSphere;
-
-        _overlay?.SetFormat(newFormat);
-        _overlay?.ResetHideTimer();
-        _overlay?.UpdateState(
-            _videoManager?.State == PlaybackState.Playing,
-            _videoManager?.PositionMs ?? 0,
-            _videoManager?.DurationMs ?? 0,
-            _playbackSpeed
-        );
-    }
-
-    public void SetMaxPercentage(int value)
-    {
-        _maxPercentage = value;
-        _funscriptPlayer?.SetMaxPercentage(value);
-        _outputManager?.SetMaxPercentage(value);
-    }
-
-    private void SetupOverlayEvents()
-    {
-        if (_overlay == null) return;
-
-        _overlay.OnPlayPause += () =>
-        {
-            _videoManager?.TogglePlayPause();
-            _overlay.ResetHideTimer();
-        };
-
-        _overlay.OnStop += () =>
-        {
-            _videoManager?.Stop();
-            _funscriptPlayer?.SetActions(null);
-            GetTree().ChangeSceneToFile("res://Scenes/Main.tscn");
-        };
-
-        _overlay.OnBack += () =>
-        {
-            _videoManager?.Stop();
-            GetTree().ChangeSceneToFile("res://Scenes/Main.tscn");
-        };
-
-        _overlay.OnSeek += (ms) =>
-        {
-            _videoManager?.SeekTo(ms);
-            _funscriptPlayer?.SeekTo(ms);
-            _overlay.ResetHideTimer();
-        };
-
-        _overlay.OnSpeedChange += (speed) =>
-        {
-            _playbackSpeed = speed;
-            _videoManager?.SetSpeed(speed);
-            _funscriptPlayer?.SetSpeedFactor(speed);
-            _overlay.ResetHideTimer();
-        };
-
-        _overlay.OnFormatChange += (format) =>
-        {
-            SwitchFormat(format);
-            _overlay.ResetHideTimer();
-        };
-
-        _overlay.OnMaxPercentageChange += (value) =>
-        {
-            SetMaxPercentage(value);
-        };
     }
 
     private void SetupVideoEvents()
@@ -297,6 +315,16 @@ public partial class VRPlayer : Node
                 var mat = _sphereMeshInstance.MaterialOverride as ShaderMaterial;
                 mat?.SetShaderParameter("eye_offset", -0.032);
             }
+        }
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (@event.IsActionPressed("ui_cancel") ||
+            (@event is InputEventKey key && key.Keycode == Key.Space && key.Pressed) ||
+            (@event is InputEventJoypadButton joy && joy.ButtonIndex == JoyButton.B && joy.Pressed))
+        {
+            _overlay?.ToggleVisibility();
         }
     }
 

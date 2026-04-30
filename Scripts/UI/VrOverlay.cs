@@ -3,7 +3,7 @@ using VRPlayerProject.Models;
 
 namespace VRPlayerProject.UI;
 
-public partial class VrOverlay : CanvasLayer
+public partial class VrOverlay : Control
 {
     private Button? _playPauseBtn;
     private Button? _stopBtn;
@@ -32,7 +32,7 @@ public partial class VrOverlay : CanvasLayer
     private static readonly VideoFormat[] Formats =
         { VideoFormat.Flat, VideoFormat.Mono180, VideoFormat.Fisheye180, VideoFormat.Mono360, VideoFormat.Stereo360 };
     private static readonly string[] FormatLabels =
-        { "Flat", "180°", "Fish", "360°", "3D" };
+        { "Flat", "180\u00b0", "Fish", "360\u00b0", "3D" };
 
     public event Action? OnPlayPause;
     public event Action? OnStop;
@@ -128,7 +128,7 @@ public partial class VrOverlay : CanvasLayer
         _speed = speed;
 
         if (_playPauseBtn != null)
-            _playPauseBtn.Text = isPlaying ? "⏸" : "▶";
+            _playPauseBtn.Text = isPlaying ? "\u23f8" : "\u25b6";
 
         if (_progressSlider != null)
         {
@@ -180,21 +180,10 @@ public partial class VrOverlay : CanvasLayer
         if (_overlayPanel != null) _overlayPanel.Visible = show;
     }
 
-    public void Toggle()
+    public void ToggleVisibility()
     {
         ToggleVisible(!_visible);
         if (_visible) ResetHideTimer();
-    }
-
-    public override void _Input(InputEvent @event)
-    {
-        if (@event.IsActionPressed("ui_cancel") ||
-            (@event is InputEventKey key && key.Keycode == Key.Space) ||
-            (@event is InputEventJoypadButton joy && joy.ButtonIndex == JoyButton.B && joy.Pressed))
-        {
-            Toggle();
-            GetViewport().SetInputAsHandled();
-        }
     }
 
     private static string FormatTime(double ms)

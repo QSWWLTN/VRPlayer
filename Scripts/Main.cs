@@ -278,6 +278,23 @@ public partial class Main : Control
         vr.Initialize(_selectedVideoPath, _selectedScriptPath, (VideoFormat)_selectedFormat, _serialService, _wsService);
         GetTree().Root.AddChild(vr);
         GetTree().CurrentScene = vr;
+
+        HideParentVrPanel();
+    }
+
+    private void HideParentVrPanel()
+    {
+        Node? parent = this;
+        while (parent != null && parent != GetTree().Root)
+        {
+            if (parent is UI.VrPanel3D panel)
+            {
+                panel.Visible = false;
+                panel.FollowCamera = false;
+                return;
+            }
+            parent = parent.GetParent();
+        }
     }
 
     private void Log(string message)

@@ -32,9 +32,19 @@ public partial class HeadTrackerService : Node
         if (!_enabled) return;
 
         var camera = GetViewport().GetCamera3D();
-        if (camera != null)
+        if (camera == null) return;
+
+        if (camera is XRCamera3D)
         {
-            camera.Rotation = _rotationEuler;
+            if (OnRotationChanged != null)
+            {
+                var xrOrigin = camera.GetParent() as XROrigin3D;
+                if (xrOrigin != null)
+                    OnRotationChanged.Invoke(xrOrigin.GlobalRotation);
+            }
+            return;
         }
+
+        camera.Rotation = _rotationEuler;
     }
 }
