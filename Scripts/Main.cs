@@ -41,6 +41,13 @@ public partial class Main : Control
 
     public override void _Ready()
     {
+		// 强制系统使用主窗口来渲染 XR
+		var xrInterface = XRServer.FindInterface("OpenXR");
+		if (xrInterface != null && xrInterface.IsInitialized())
+		{
+			GetWindow().UseXR = true;
+		}
+		
         _videoPathEdit = GetNodeOrNull<LineEdit>("Panel/VBoxContainer/VideoSection/VideoPath");
         _scriptPathEdit = GetNodeOrNull<LineEdit>("Panel/VBoxContainer/ScriptSection/ScriptPath");
         _formatDropdown = GetNodeOrNull<OptionButton>("Panel/VBoxContainer/FormatSection/FormatDropdown");
