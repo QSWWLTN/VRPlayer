@@ -18,6 +18,7 @@ public partial class VRPlayer : Node
 	private MeshInstance3D? _sphereMeshInstance;
 	private MeshInstance3D? _flatMeshInstance;
 	private Camera3D? _camera;
+	private OpenXRCompositionLayerQuad? _compositionLayer;
 
 	private string? _videoPath;
 	private string? _scriptPath;
@@ -46,31 +47,24 @@ public partial class VRPlayer : Node
 
 	public override void _Ready()
 	{
-		
-		// 1. 确保 VR 在此场景依然开启
 		var xrInterface = XRServer.FindInterface("OpenXR");
 		if (xrInterface != null && xrInterface.IsInitialized())
 		{
 			GetTree().Root.UseXR = true;
 		}
 
-		// (保留你原有的代码...)
 		_videoManager = new VideoManager();
 		AddChild(_videoManager);
+
 		_funscriptPlayer = new FunscriptPlayerService();
+
 		_headTracker = GetNodeOrNull<HeadTrackerService>("HeadTracker");
-		
-		// 2. 关键修复：如果在 VR 模式下，必须禁用鼠标视角控制！
+
 		if (xrInterface != null && xrInterface.IsInitialized())
 		{
-			_headTracker?.SetEnabled(false); 
+			_headTracker?.SetEnabled(false);
 		}
-		_videoManager = new VideoManager();
-		AddChild(_videoManager);
 
-		_funscriptPlayer = new FunscriptPlayerService();
-
-		_headTracker = GetNodeOrNull<HeadTrackerService>("HeadTracker");
 		_uiPanel = GetNodeOrNull<VrPanel3D>("VrPanel3D");
 
 		_sphereMeshInstance = GetNodeOrNull<MeshInstance3D>("SphereMesh");
@@ -78,11 +72,15 @@ public partial class VRPlayer : Node
 		_camera = GetNodeOrNull<Camera3D>("XROrigin3D/XRCamera3D");
 		_debugLabel = GetNodeOrNull<Label3D>("DebugLabel");
 
+		_compositionLayer = GetNodeOrNull<OpenXRCompositionLayerQuad>("ExoVideoPlayer");
+		if (_compositionLayer == null)
+			GD.PrintErr("[VRPlayer] ExoVideoPlayer (OpenXRCompositionLayerQuad) not found in scene.");
+
 		SetupSphereMesh();
 		SetupFlatMesh();
 		SetupShaders();
 
-		_videoManager?.SetupVideoPlayers(this);
+		_videoManager.SetupVideoPlayers(this, _compositionLayer!);
 
 		SetupOverlay();
 
@@ -93,21 +91,50 @@ public partial class VRPlayer : Node
 			_camera.Current = true;
 
 		if (_videoPath != null)
-			LoadVideo(_videoPath);
+			PlayVideo(_videoPath);
 
 		if (_scriptPath != null)
 			_ = LoadScriptAsync(_scriptPath);
-		
-		// 修复安卓端 UI 紫块和显示问题
+
 		var subViewport = GetNodeOrNull<SubViewport>("SubViewport");
 		var uiMesh = GetNodeOrNull<MeshInstance3D>("UIMesh");
 		if (uiMesh != null && subViewport != null)
 		{
 			var mat = new StandardMaterial3D();
 			mat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
-			mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha; // 允许背景透明，不遮挡视频
+			mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
 			mat.AlbedoTexture = subViewport.GetTexture();
 			uiMesh.MaterialOverride = mat;
+		}
+	}
+
+	public void PlayVideo(string absolutePath)
+	{
+		if (_videoManager == null) return;
+
+		string uri = absolutePath;
+		if (!uri.StartsWith("file://") && !uri.StartsWith("http"))
+		{
+			if (uri.StartsWith("res://") || uri.StartsWith("user://"))
+				uri = ProjectSettings.GlobalizePath(uri);
+			uri = uri.Replace("\\", "/");
+			if (!uri.StartsWith("/"))
+				uri = "/" + uri;
+			uri = "file://" + uri;
+		}
+
+		if (_debugLabel != null)
+			_debugLabel.Text = "Loading: " + absolutePath.GetFile();
+
+		_videoManager.LoadFile(absolutePath, _currentFormat);
+		AdjustMeshForVideo();
+		_overlay?.ResetHideTimer();
+
+		if (_videoManager.State != PlaybackState.Error)
+		{
+			_videoManager.Play();
+			if (_debugLabel != null)
+				_debugLabel.Text = "Playing: " + absolutePath.GetFile();
 		}
 	}
 
@@ -303,25 +330,6 @@ public partial class VRPlayer : Node
 		{
 			_outputManager.SendPosition(pos);
 		};
-	}
-
-	private void LoadVideo(string path)
-	{
-		if (_videoManager == null) return;
-
-		if (_debugLabel != null)
-			_debugLabel.Text = "Loading: " + path.GetFile();
-
-		_videoManager.LoadFile(path, _currentFormat);
-		AdjustMeshForVideo();
-		_overlay?.ResetHideTimer();
-
-		if (_videoManager.State != PlaybackState.Error)
-		{
-			_videoManager.Play();
-			if (_debugLabel != null)
-				_debugLabel.Text = "Playing: " + path.GetFile();
-		}
 	}
 
 	private void AdjustMeshForVideo()

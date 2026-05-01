@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode cull_front, unshaded, depth_draw_never, blend_mix;
 
-uniform sampler2D video_texture : filter_linear, repeat_disable;
+uniform samplerExternalOES video_texture : filter_linear, repeat_disable;
 uniform int projection_mode = 3;
 
 void fragment() {

@@ -257,12 +257,11 @@ public partial class Main : Control
 		AddChild(dialog);
 		dialog.FileSelected += (path) =>
 		{
-			_selectedVideoPath = path;
-			_videoPathEdit!.Text = path;
-			AutoMatchScript(path);
+			_selectedVideoPath = NormalizePath(path);
+			_videoPathEdit!.Text = _selectedVideoPath;
+			AutoMatchScript(_selectedVideoPath);
 			dialog.QueueFree();
 		};
-		// 适配放大后的屏幕尺寸
 		dialog.PopupCentered(new Vector2I(700, 500));
 	}
 
@@ -301,9 +300,9 @@ public partial class Main : Control
 		AddChild(dialog);
 		dialog.FileSelected += (path) =>
 		{
-			_selectedScriptPath = path;
-			_scriptPathEdit!.Text = path;
-			Log($"Script selected: {path.GetFile()}");
+			_selectedScriptPath = NormalizePath(path);
+			_scriptPathEdit!.Text = _selectedScriptPath;
+			Log($"Script selected: {_selectedScriptPath.GetFile()}");
 			dialog.QueueFree();
 		};
 		dialog.PopupCentered(new Vector2I(700, 500));
@@ -346,6 +345,25 @@ public partial class Main : Control
 			}
 			parent = parent.GetParent();
 		}
+	}
+
+	private static string NormalizePath(string path)
+	{
+		if (string.IsNullOrEmpty(path))
+			return path;
+
+		path = path.Replace("\\", "/");
+
+		if (!IsAndroid)
+			return path;
+
+		if (!path.StartsWith("/"))
+		{
+			if (path.StartsWith("res://") || path.StartsWith("user://"))
+				path = ProjectSettings.GlobalizePath(path);
+		}
+
+		return path;
 	}
 
 	private void Log(string message)

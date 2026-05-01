@@ -1,8 +1,8 @@
 shader_type spatial;
 render_mode unshaded;
 
-uniform sampler2D video_texture_left;
-uniform sampler2D video_texture_right;
+uniform samplerExternalOES video_texture_left;
+uniform samplerExternalOES video_texture_right;
 uniform bool enabled = true;
 uniform int display_mode = 0;
 

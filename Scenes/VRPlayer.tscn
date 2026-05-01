@@ -74,5 +74,9 @@ render_target_update_mode = 4
 
 [node name="VrOverlay" parent="SubViewport" instance=ExtResource("3")]
 
+[node name="ExoVideoPlayer" type="OpenXRCompositionLayerQuad" parent="."]
+use_android_surface = true
+enable_hole_punch = true
+
 [node name="HeadTracker" type="Node" parent="."]
 script = ExtResource("2")
