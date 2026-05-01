@@ -6,11 +6,9 @@ namespace VRPlayerProject.Services;
 public partial class VideoManager : Node
 {
     private Node? _exoPlayer;
-    private OpenXRCompositionLayerQuad? _compositionLayer;
+    private OpenXRCompositionLayerEquirect? _compositionLayer;
     private int _playerId = -1;
 
-    private ShaderMaterial? _sphereMaterial;
-    private ShaderMaterial? _flatMaterial;
     private bool _exoReady;
 
     public int MainPlayerId => _playerId;
@@ -36,7 +34,7 @@ public partial class VideoManager : Node
         GD.Print("[VideoManager] Initialized.");
     }
 
-    public void SetupVideoPlayers(Node parent, OpenXRCompositionLayerQuad compositionLayer)
+    public void SetupVideoPlayers(Node parent, OpenXRCompositionLayerEquirect compositionLayer)
     {
         _compositionLayer = compositionLayer;
 
@@ -50,9 +48,6 @@ public partial class VideoManager : Node
         ConnectExoPlayerSignals();
         GD.Print("[VideoManager] ExoPlayer integration ready.");
     }
-
-    public void SetSphereMaterial(ShaderMaterial material) => _sphereMaterial = material;
-    public void SetFlatMaterial(ShaderMaterial material) => _flatMaterial = material;
 
     public void SwitchFormat(VideoFormat format)
     {

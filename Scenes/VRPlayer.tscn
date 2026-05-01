@@ -1,13 +1,15 @@
-[gd_scene load_steps=10 format=3 uid="uid://b4hdoj5avmy5l"]
+[gd_scene format=3 uid="uid://b4hdoj5avmy5l"]
 
-[ext_resource type="Script" path="res://Scripts/VRPlayer.cs" id="1"]
-[ext_resource type="Script" path="res://Scripts/Services/HeadTrackerService.cs" id="2"]
-[ext_resource type="PackedScene" path="res://Scenes/VrOverlay.tscn" id="3"]
-[ext_resource type="Script" path="res://Scripts/UI/UIPointer.cs" id="4"]
+[ext_resource type="Script" uid="uid://b1f202oiorbe6" path="res://Scripts/VRPlayer.cs" id="1"]
+[ext_resource type="Script" uid="uid://dpdm7q8kc6gg4" path="res://Scripts/Services/HeadTrackerService.cs" id="2"]
+[ext_resource type="PackedScene" uid="uid://dgcvq07mvrykm" path="res://Scenes/VrOverlay.tscn" id="3"]
+[ext_resource type="Script" uid="uid://vxdqjq8vmc1s" path="res://Scripts/UI/UIPointer.cs" id="4"]
 
 [sub_resource type="Environment" id="Environment_8a7f3b2"]
-background_color = Color(0.0, 0.0, 0.0, 1)
 background_mode = 1
+
+[sub_resource type="BoxMesh" id="BoxMesh_laser"]
+size = Vector3(0.005, 0.005, 1)
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_vr"]
 viewport_path = NodePath("SubViewport")
@@ -25,58 +27,49 @@ size = Vector2(1.6, 1.2)
 [sub_resource type="BoxShape3D" id="BoxShape3D_vr"]
 size = Vector3(1.6, 1.2, 0.05)
 
-[sub_resource type="BoxMesh" id="BoxMesh_laser"]
-size = Vector3(0.005, 0.005, 1)
-
-[node name="VRPlayer" type="Node3D"]
+[node name="VRPlayer" type="Node3D" unique_id=714880656]
 script = ExtResource("1")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=640788147]
 environment = SubResource("Environment_8a7f3b2")
 
-[node name="XROrigin3D" type="XROrigin3D" parent="."]
+[node name="XROrigin3D" type="XROrigin3D" parent="." unique_id=1393998346]
 
-[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D"]
+[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D" unique_id=819078742]
 current = true
 
-[node name="RightHand" type="XRController3D" parent="XROrigin3D"]
+[node name="RightHand" type="XRController3D" parent="XROrigin3D" unique_id=835142438]
 tracker = &"right_hand"
 script = ExtResource("4")
 
-[node name="PointerRay" type="RayCast3D" parent="XROrigin3D/RightHand"]
+[node name="PointerRay" type="RayCast3D" parent="XROrigin3D/RightHand" unique_id=885125033]
 target_position = Vector3(0, 0, -10)
 collide_with_areas = true
 
-[node name="LaserMesh" type="MeshInstance3D" parent="XROrigin3D/RightHand"]
+[node name="LaserMesh" type="MeshInstance3D" parent="XROrigin3D/RightHand" unique_id=147106216]
 mesh = SubResource("BoxMesh_laser")
 
-[node name="UIMesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -1.5)
+[node name="UIMesh" type="MeshInstance3D" parent="." unique_id=284420205]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -1.5)
 mesh = SubResource("QuadMesh_vr")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="UIMesh"]
+[node name="StaticBody3D" type="StaticBody3D" parent="UIMesh" unique_id=775262426]
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="UIMesh/StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="UIMesh/StaticBody3D" unique_id=1817529271]
 shape = SubResource("BoxShape3D_vr")
 
-[node name="SphereMesh" type="MeshInstance3D" parent="."]
-visible = true
-
-[node name="FlatMesh" type="MeshInstance3D" parent="."]
-visible = false
-
-[node name="SubViewport" type="SubViewport" parent="."]
+[node name="SubViewport" type="SubViewport" parent="." unique_id=1581934104]
 disable_3d = true
-transparent_bg = true
 gui_embed_subwindows = true
 size = Vector2i(800, 600)
 render_target_update_mode = 4
 
-[node name="VrOverlay" parent="SubViewport" instance=ExtResource("3")]
+[node name="VrOverlay" parent="SubViewport" unique_id=880384113 instance=ExtResource("3")]
 
-[node name="ExoVideoPlayer" type="OpenXRCompositionLayerQuad" parent="."]
+[node name="VideoLayer" type="OpenXRCompositionLayerEquirect" parent="." unique_id=1534191013]
 use_android_surface = true
-enable_hole_punch = true
+radius = 50.0
+layer = -1
 
-[node name="HeadTracker" type="Node" parent="."]
+[node name="HeadTracker" type="Node" parent="." unique_id=928489937]
 script = ExtResource("2")

@@ -15,10 +15,8 @@ public partial class VRPlayer : Node
 	private VrOverlay? _overlay;
 	private VrPanel3D? _uiPanel;
 
-	private MeshInstance3D? _sphereMeshInstance;
-	private MeshInstance3D? _flatMeshInstance;
 	private Camera3D? _camera;
-	private OpenXRCompositionLayerQuad? _compositionLayer;
+	private OpenXRCompositionLayerEquirect? _compositionLayer;
 
 	private string? _videoPath;
 	private string? _scriptPath;
@@ -67,18 +65,12 @@ public partial class VRPlayer : Node
 
 		_uiPanel = GetNodeOrNull<VrPanel3D>("VrPanel3D");
 
-		_sphereMeshInstance = GetNodeOrNull<MeshInstance3D>("SphereMesh");
-		_flatMeshInstance = GetNodeOrNull<MeshInstance3D>("FlatMesh");
 		_camera = GetNodeOrNull<Camera3D>("XROrigin3D/XRCamera3D");
 		_debugLabel = GetNodeOrNull<Label3D>("DebugLabel");
 
-		_compositionLayer = GetNodeOrNull<OpenXRCompositionLayerQuad>("ExoVideoPlayer");
+		_compositionLayer = GetNodeOrNull<OpenXRCompositionLayerEquirect>("VideoLayer");
 		if (_compositionLayer == null)
-			GD.PrintErr("[VRPlayer] ExoVideoPlayer (OpenXRCompositionLayerQuad) not found in scene.");
-
-		SetupSphereMesh();
-		SetupFlatMesh();
-		SetupShaders();
+			GD.PrintErr("[VRPlayer] VideoLayer (OpenXRCompositionLayerEquirect) not found in scene.");
 
 		_videoManager.SetupVideoPlayers(this, _compositionLayer!);
 
@@ -127,7 +119,6 @@ public partial class VRPlayer : Node
 			_debugLabel.Text = "Loading: " + absolutePath.GetFile();
 
 		_videoManager.LoadFile(absolutePath, _currentFormat);
-		AdjustMeshForVideo();
 		_overlay?.ResetHideTimer();
 
 		if (_videoManager.State != PlaybackState.Error)
@@ -211,10 +202,6 @@ public partial class VRPlayer : Node
 		_currentFormat = newFormat;
 		_videoManager?.SwitchFormat(newFormat);
 
-		bool isSphere = newFormat != VideoFormat.Flat;
-		if (_sphereMeshInstance != null) _sphereMeshInstance.Visible = isSphere;
-		if (_flatMeshInstance != null) _flatMeshInstance.Visible = !isSphere;
-
 		_overlay?.SetFormat(newFormat);
 		_overlay?.ResetHideTimer();
 		_overlay?.UpdateState(
@@ -230,57 +217,6 @@ public partial class VRPlayer : Node
 		_maxPercentage = value;
 		_funscriptPlayer?.SetMaxPercentage(value);
 		_outputManager?.SetMaxPercentage(value);
-	}
-
-	private void SetupSphereMesh()
-	{
-		if (_sphereMeshInstance == null) return;
-
-		var sphere = new SphereMesh();
-		sphere.Radius = 50.0f;
-		sphere.Height = 100.0f;
-		sphere.RadialSegments = 128;
-		sphere.Rings = 64;
-		_sphereMeshInstance.Mesh = sphere;
-		_sphereMeshInstance.Visible = _currentFormat != VideoFormat.Flat;
-	}
-
-	private void SetupFlatMesh()
-	{
-		if (_flatMeshInstance == null) return;
-
-		var quad = new QuadMesh();
-		quad.Size = new Vector2(16.0f, 9.0f);
-		_flatMeshInstance.Mesh = quad;
-		_flatMeshInstance.Visible = _currentFormat == VideoFormat.Flat;
-	}
-
-	private void SetupShaders()
-	{
-		if (_sphereMeshInstance != null)
-		{
-			var sphereShader = ResourceLoader.Load<Shader>("res://Resources/Shaders/video_sphere.gdshader");
-			if (sphereShader != null)
-			{
-				var shaderMat = new ShaderMaterial();
-				shaderMat.Shader = sphereShader;
-				shaderMat.SetShaderParameter("projection_mode", (int)_currentFormat);
-				_sphereMeshInstance.MaterialOverride = shaderMat;
-				_videoManager?.SetSphereMaterial(shaderMat);
-			}
-		}
-
-		if (_flatMeshInstance != null)
-		{
-			var flatShader = ResourceLoader.Load<Shader>("res://Resources/Shaders/video_flat.gdshader");
-			if (flatShader != null)
-			{
-				var flatMat = new ShaderMaterial();
-				flatMat.Shader = flatShader;
-				_flatMeshInstance.MaterialOverride = flatMat;
-				_videoManager?.SetFlatMaterial(flatMat);
-			}
-		}
 	}
 
 	private void SetupVideoEvents()
@@ -318,7 +254,6 @@ public partial class VRPlayer : Node
 
 		_videoManager.OnDimensionsChanged += (w, h) =>
 		{
-			AdjustMeshForVideo();
 		};
 	}
 
@@ -330,31 +265,6 @@ public partial class VRPlayer : Node
 		{
 			_outputManager.SendPosition(pos);
 		};
-	}
-
-	private void AdjustMeshForVideo()
-	{
-		if (_videoManager == null) return;
-		int w = _videoManager.VideoWidth;
-		int h = _videoManager.VideoHeight;
-		if (w <= 0 || h <= 0) return;
-
-		if (_currentFormat == VideoFormat.Flat && _flatMeshInstance != null)
-		{
-			float baseHeight = 9.0f;
-			float newWidth = baseHeight * ((float)w / h);
-			var quad = new QuadMesh();
-			quad.Size = new Vector2(newWidth, baseHeight);
-			_flatMeshInstance.Mesh = quad;
-		}
-		else if (_currentFormat != VideoFormat.Flat && _sphereMeshInstance != null)
-		{
-			if (_currentFormat == VideoFormat.Stereo360)
-			{
-				var mat = _sphereMeshInstance.MaterialOverride as ShaderMaterial;
-				mat?.SetShaderParameter("eye_offset", -0.032);
-			}
-		}
 	}
 
 	public override void _Input(InputEvent @event)
