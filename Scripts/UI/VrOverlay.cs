@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using VRPlayerProject.Models;
 
 namespace VRPlayerProject.UI;
@@ -15,6 +16,8 @@ public partial class VrOverlay : Control
     private Button? _formatBtn;
     private HSlider? _maxSlider;
     private Label? _maxLabel;
+    private HSlider? _ipdSlider;   // 新增：IPD 滑块
+    private Label? _ipdLabel;      // 新增：IPD 数值显示
     private Control? _overlayPanel;
     private Godot.Timer? _hideTimer;
 
@@ -24,6 +27,7 @@ public partial class VrOverlay : Control
     private double _speed = 1.0;
     private VideoFormat _format = VideoFormat.Mono360;
     private int _maxPercentage = 100;
+    private float _ipdValue = 63.0f; // 默认人类瞳距 63mm
     private bool _visible = true;
     private bool _isDragging;
 
@@ -41,6 +45,7 @@ public partial class VrOverlay : Control
     public event Action<double>? OnSpeedChange;
     public event Action<VideoFormat>? OnFormatChange;
     public event Action<int>? OnMaxPercentageChange;
+    public event Action<float>? OnIpdChange; // 新增：IPD 改变事件
 
     public override void _Ready()
     {
@@ -54,6 +59,11 @@ public partial class VrOverlay : Control
         _formatBtn = GetNodeOrNull<Button>("Panel/TopBar/FormatBtn");
         _maxSlider = GetNodeOrNull<HSlider>("Panel/MaxSection/MaxSlider");
         _maxLabel = GetNodeOrNull<Label>("Panel/MaxSection/MaxLabel");
+        
+        // 获取新增的 IPD 节点
+        _ipdSlider = GetNodeOrNull<HSlider>("Panel/IpdSection/IpdSlider");
+        _ipdLabel = GetNodeOrNull<Label>("Panel/IpdSection/IpdLabel");
+        
         _overlayPanel = GetNodeOrNull<Control>("Panel");
 
         _hideTimer = new Godot.Timer();
@@ -83,6 +93,18 @@ public partial class VrOverlay : Control
                 _maxPercentage = (int)value;
                 if (_maxLabel != null) _maxLabel.Text = $"{_maxPercentage}%";
                 OnMaxPercentageChange?.Invoke(_maxPercentage);
+                ResetHideTimer();
+            };
+        }
+
+        // 绑定 IPD 滑块事件
+        if (_ipdSlider != null)
+        {
+            _ipdSlider.ValueChanged += (value) =>
+            {
+                _ipdValue = (float)value;
+                if (_ipdLabel != null) _ipdLabel.Text = $"{_ipdValue:F1}mm";
+                OnIpdChange?.Invoke(_ipdValue);
                 ResetHideTimer();
             };
         }

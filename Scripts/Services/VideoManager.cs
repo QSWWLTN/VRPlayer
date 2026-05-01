@@ -1,5 +1,7 @@
 using Godot;
 using VRPlayerProject.Native;
+using VRPlayerProject.Models;
+using System;
 
 namespace VRPlayerProject.Services;
 
@@ -266,7 +268,10 @@ public partial class VideoManager : Node
 		if (_audioPlayer != null && _audioPlayer.Stream != null)
 		{
 			_audioPlayer.Play((float)(_currentFrame * _frameTime));
+			_audioPlayer.PitchScale = (float)_speed;
 		}
+
+		_accumulator = _currentFrame * _frameTime; // 同步内部时钟
 
 		State = PlaybackState.Playing;
 		OnStateChanged?.Invoke(State);
@@ -317,7 +322,7 @@ public partial class VideoManager : Node
 
 		_seekTargetMs = ms;
 		_currentFrame = targetFrame;
-		_accumulator = 0;
+		_accumulator = ms / 1000.0;
 
 		_video.SeekFrame(targetFrame);
 		_video.NextFrame();
@@ -325,11 +330,11 @@ public partial class VideoManager : Node
 
 		if (_audioPlayer != null && _audioPlayer.Stream != null)
 		{
-			_audioPlayer.Play((float)(_currentFrame * _frameTime));
+			_audioPlayer.Play((float)(ms / 1000.0));
 			_audioPlayer.StreamPaused = State != PlaybackState.Playing;
 		}
 
-		PositionMs = (_currentFrame / framerate) * 1000.0;
+		PositionMs = ms;
 		OnPositionChanged?.Invoke(PositionMs);
 	}
 
@@ -347,11 +352,28 @@ public partial class VideoManager : Node
 
 		if (State == PlaybackState.Playing)
 		{
-			_accumulator += delta * _speed;
+			double smoothTimeSec;
 
-			while (_accumulator >= _frameTime && _currentFrame < _frameCount - 1)
+			// 核心修复：将音频播放器作为绝对主时钟（Master Clock）。
+			// 加上 GetTimeSinceLastMix 以提供亚毫秒级的平滑时间过渡，这对硬件极其重要。
+			if (_audioPlayer != null && _audioPlayer.Playing)
 			{
-				_accumulator -= _frameTime;
+				smoothTimeSec = _audioPlayer.GetPlaybackPosition() + (AudioServer.GetTimeSinceLastMix() * _speed);
+				_accumulator = smoothTimeSec; // 同步备用时钟
+			}
+			else
+			{
+				// 无音频时的备用方案
+				_accumulator += delta * _speed;
+				smoothTimeSec = _accumulator;
+			}
+
+			// 让视频帧（画面）去追赶主时钟时间
+			int targetFrame = (int)(smoothTimeSec / _frameTime);
+			targetFrame = Mathf.Clamp(targetFrame, 0, _frameCount - 1);
+
+			while (_currentFrame < targetFrame && _currentFrame < _frameCount - 1)
+			{
 				_currentFrame++;
 				_video.NextFrame();
 			}
@@ -366,37 +388,13 @@ public partial class VideoManager : Node
 
 			UpdateTexturesFromVideo();
 
-			double framerate = 1.0 / _frameTime;
-			PositionMs = (_currentFrame / framerate) * 1000.0;
+			// 核心修复：为 Funscript 提供极其平滑的连续时间流！
+			// 以前它是阶梯状（如每 33ms 跃迁一次），现在它每秒产生多达 90 次以上的细腻时间戳。
+			PositionMs = smoothTimeSec * 1000.0;
 			OnPositionChanged?.Invoke(PositionMs);
-
-			SyncAudio();
 		}
 
 		UpdateShaderTextures();
-	}
-
-	private void SyncAudio()
-	{
-		if (_audioPlayer == null || _audioPlayer.Stream == null)
-			return;
-
-		if (!_audioPlayer.Playing)
-		{
-			_audioPlayer.Play((float)(_currentFrame * _frameTime));
-			_audioPlayer.PitchScale = (float)_speed;
-		}
-
-		double expectedSec = _currentFrame * _frameTime;
-		double actualSec = _audioPlayer.GetPlaybackPosition() +
-						   AudioServer.GetTimeSinceLastMix();
-		double offset = actualSec - expectedSec;
-
-		if (Mathf.Abs(offset) > 0.1)
-		{
-			_audioPlayer.Play((float)expectedSec);
-			_audioPlayer.PitchScale = (float)_speed;
-		}
 	}
 
 	public override void _ExitTree()

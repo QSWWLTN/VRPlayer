@@ -9,6 +9,9 @@ uniform vec4 color_profile = vec4(1.5748, 0.1873, 0.4681, 1.8556);
 uniform bool full_color_range = true;
 uniform int projection_mode = 3;
 
+// 接收瞳距偏移量
+uniform float ipd_offset = 0.0;
+
 vec3 yuv_to_rgb(float y, float u, float v) {
 	float Y, U, V;
 	if (full_color_range) {
@@ -29,18 +32,20 @@ vec3 yuv_to_rgb(float y, float u, float v) {
 void fragment() {
 	vec3 world_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	vec3 dir = normalize(world_pos - CAMERA_POSITION_WORLD);
-
 	float theta = atan(dir.x, -dir.z);
 	float phi = acos(clamp(dir.y, -1.0, 1.0));
 	vec2 uv = vec2(0.0);
 	bool show = false;
 
-	if (projection_mode == 1) {
+	float eye_direction = (int(VIEW_INDEX) == 0) ? 1.0 : -1.0;
+
+	if (projection_mode == 1) { // Mono 180
 		if (theta >= -1.5707963 && theta <= 1.5707963) {
 			uv = vec2((theta + 1.5707963) / 3.14159265, phi / 3.14159265);
+			uv.x += ipd_offset * eye_direction;
 			show = true;
 		}
-	} else if (projection_mode == 2) {
+	} else if (projection_mode == 2) { // Fisheye 180
 		vec3 fwd = vec3(0.0, 0.0, -1.0);
 		float cos_angle = dot(dir, fwd);
 		if (cos_angle >= 0.0) {
@@ -50,29 +55,27 @@ void fragment() {
 				float r = (angle / 1.5707963) * 0.5;
 				uv = vec2(0.5, 0.5) + r * vec2(cos(phi2), sin(phi2));
 				if (length(uv - vec2(0.5, 0.5)) <= 0.5) {
+					uv.x += ipd_offset * eye_direction;
 					show = true;
 				}
 			}
 		}
-	} else if (projection_mode == 3) {
+	} else if (projection_mode == 3) { // Mono 360
 		uv = vec2(theta / 6.2831853 + 0.5, phi / 3.14159265);
+		uv.x = fract(uv.x + ipd_offset * eye_direction);
 		show = true;
-	} else if (projection_mode == 4) {
+	} else if (projection_mode == 4) { // Stereo 360 (上下3D)
 		uv = vec2(theta / 6.2831853 + 0.5, phi / 3.14159265);
-		if (int(VIEW_INDEX) == 0) {
-			uv.y = uv.y * 0.5;
-		} else {
-			uv.y = uv.y * 0.5 + 0.5;
-		}
+		uv.x = fract(uv.x + ipd_offset * eye_direction);
+		if (int(VIEW_INDEX) == 0) uv.y = uv.y * 0.5;
+		else uv.y = uv.y * 0.5 + 0.5;
 		show = true;
-	} else if (projection_mode == 5) {
+	} else if (projection_mode == 5) { // Stereo 180 (左右3D)
 		if (theta >= -1.5707963 && theta <= 1.5707963) {
 			uv = vec2((theta + 1.5707963) / 3.14159265, phi / 3.14159265);
-			if (int(VIEW_INDEX) == 0) {
-				uv.x = uv.x * 0.5;
-			} else {
-				uv.x = uv.x * 0.5 + 0.5;
-			}
+			uv.x += ipd_offset * eye_direction;
+			if (int(VIEW_INDEX) == 0) uv.x = uv.x * 0.5;
+			else uv.x = uv.x * 0.5 + 0.5;
 			show = true;
 		}
 	}
