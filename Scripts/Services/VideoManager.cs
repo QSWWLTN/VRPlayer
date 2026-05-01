@@ -56,11 +56,11 @@ public partial class VideoManager : Node
 
     public bool LoadFile(string path, VideoFormat format)
     {
-        if (string.IsNullOrEmpty(path) || _exoPlayer == null || _compositionLayer == null)
-        {
-            SetErrorState();
-            return false;
-        }
+		if (string.IsNullOrEmpty(path) || _exoPlayer == null || _compositionLayer == null || !OS.HasFeature("android"))
+		{
+			SetErrorState();
+			return false;
+		}
 
         ReleaseCurrentPlayer();
 

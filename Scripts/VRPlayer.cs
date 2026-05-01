@@ -72,7 +72,10 @@ public partial class VRPlayer : Node
 		if (_compositionLayer == null)
 			GD.PrintErr("[VRPlayer] VideoLayer (OpenXRCompositionLayerEquirect) not found in scene.");
 
-		_videoManager.SetupVideoPlayers(this, _compositionLayer!);
+		if (OS.HasFeature("android"))
+			_videoManager.SetupVideoPlayers(this, _compositionLayer!);
+		else
+			GD.Print("[VRPlayer] Not running on Android; ExoPlayer bridge skipped.");
 
 		SetupOverlay();
 
@@ -87,17 +90,6 @@ public partial class VRPlayer : Node
 
 		if (_scriptPath != null)
 			_ = LoadScriptAsync(_scriptPath);
-
-		var subViewport = GetNodeOrNull<SubViewport>("SubViewport");
-		var uiMesh = GetNodeOrNull<MeshInstance3D>("UIMesh");
-		if (uiMesh != null && subViewport != null)
-		{
-			var mat = new StandardMaterial3D();
-			mat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
-			mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-			mat.AlbedoTexture = subViewport.GetTexture();
-			uiMesh.MaterialOverride = mat;
-		}
 	}
 
 	public void PlayVideo(string absolutePath)

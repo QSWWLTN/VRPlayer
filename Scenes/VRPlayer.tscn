@@ -7,6 +7,12 @@
 
 [sub_resource type="Environment" id="Environment_8a7f3b2"]
 background_mode = 1
+background_color = Color(0, 0, 0, 1)
+tonemap_mode = 0
+glow_enabled = false
+ssao_enabled = false
+ssr_enabled = false
+sdfgi_enabled = false
 
 [sub_resource type="BoxMesh" id="BoxMesh_laser"]
 size = Vector3(0.005, 0.005, 1)
@@ -59,6 +65,7 @@ mesh = SubResource("QuadMesh_vr")
 shape = SubResource("BoxShape3D_vr")
 
 [node name="SubViewport" type="SubViewport" parent="." unique_id=1581934104]
+transparent_bg = false
 disable_3d = true
 gui_embed_subwindows = true
 size = Vector2i(800, 600)
