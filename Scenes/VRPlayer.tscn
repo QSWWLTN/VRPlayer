@@ -1,14 +1,32 @@
-[gd_scene load_steps=5 format=3 uid="uid://b4hdoj5avmy5l"]
+[gd_scene load_steps=10 format=3 uid="uid://b4hdoj5avmy5l"]
 
 [ext_resource type="Script" path="res://Scripts/VRPlayer.cs" id="1"]
 [ext_resource type="Script" path="res://Scripts/Services/HeadTrackerService.cs" id="2"]
 [ext_resource type="PackedScene" path="res://Scenes/VrOverlay.tscn" id="3"]
+[ext_resource type="Script" path="res://Scripts/UI/UIPointer.cs" id="4"]
 
 [sub_resource type="Environment" id="Environment_8a7f3b2"]
 background_color = Color(0.0, 0.0, 0.0, 1)
 background_mode = 1
-tonemap_mode = 0
-glow_enabled = false
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_vr"]
+viewport_path = NodePath("SubViewport")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vr"]
+resource_local_to_scene = true
+transparency = 1
+shading_mode = 0
+albedo_texture = SubResource("ViewportTexture_vr")
+
+[sub_resource type="QuadMesh" id="QuadMesh_vr"]
+material = SubResource("StandardMaterial3D_vr")
+size = Vector2(1.6, 1.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_vr"]
+size = Vector3(1.6, 1.2, 0.05)
+
+[sub_resource type="BoxMesh" id="BoxMesh_laser"]
+size = Vector3(0.005, 0.005, 1)
 
 [node name="VRPlayer" type="Node3D"]
 script = ExtResource("1")
@@ -20,23 +38,41 @@ environment = SubResource("Environment_8a7f3b2")
 
 [node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D"]
 current = true
-far = 1000.0
-near = 0.01
+
+[node name="RightHand" type="XRController3D" parent="XROrigin3D"]
+tracker = &"right_hand"
+script = ExtResource("4")
+
+[node name="PointerRay" type="RayCast3D" parent="XROrigin3D/RightHand"]
+target_position = Vector3(0, 0, -10)
+collide_with_areas = true
+
+[node name="LaserMesh" type="MeshInstance3D" parent="XROrigin3D/RightHand"]
+mesh = SubResource("BoxMesh_laser")
+
+[node name="UIMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, -1.5)
+mesh = SubResource("QuadMesh_vr")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="UIMesh"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="UIMesh/StaticBody3D"]
+shape = SubResource("BoxShape3D_vr")
 
 [node name="SphereMesh" type="MeshInstance3D" parent="."]
 visible = true
 
 [node name="FlatMesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -5)
 visible = false
+
+[node name="SubViewport" type="SubViewport" parent="."]
+disable_3d = true
+transparent_bg = true
+gui_embed_subwindows = true
+size = Vector2i(800, 600)
+render_target_update_mode = 4
+
+[node name="VrOverlay" parent="SubViewport" instance=ExtResource("3")]
 
 [node name="HeadTracker" type="Node" parent="."]
 script = ExtResource("2")
-
-[node name="VrOverlay" parent="." instance=ExtResource("3")]
-
-[node name="DebugLabel" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -5)
-pixel_size = 0.005
-text = "VR Player Ready"
-modulate = Color(1, 1, 1, 0.5)
