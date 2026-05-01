@@ -13,11 +13,16 @@ public partial class VRPlayer : Node
 	private OutputManager? _outputManager;
 	private HeadTrackerService? _headTracker;
 	private VrOverlay? _overlay;
-	private VrPanel3D? _uiPanel;
+	private SubViewport? _subViewport;
+	private MeshInstance3D? _uiMesh;
 
 	private MeshInstance3D? _sphereMeshInstance;
 	private MeshInstance3D? _flatMeshInstance;
+	private ShaderMaterial? _sphereMaterial;
+	private ShaderMaterial? _flatMaterial;
 	private Camera3D? _camera;
+
+	private UIPointer? _rightPointer;
 
 	private string? _videoPath;
 	private string? _scriptPath;
@@ -27,6 +32,8 @@ public partial class VRPlayer : Node
 	private bool _isSyncing;
 
 	private Label3D? _debugLabel;
+
+	private static bool IsAndroid => OS.HasFeature("android");
 
 	public void Initialize(
 		string videoPath,
@@ -46,32 +53,24 @@ public partial class VRPlayer : Node
 
 	public override void _Ready()
 	{
-		
-		// 1. 确保 VR 在此场景依然开启
+		if (IsAndroid)
+			OS.RequestPermissions();
+
 		var xrInterface = XRServer.FindInterface("OpenXR");
 		if (xrInterface != null && xrInterface.IsInitialized())
 		{
 			GetTree().Root.UseXR = true;
 		}
 
-		// (保留你原有的代码...)
-		_videoManager = new VideoManager();
-		AddChild(_videoManager);
-		_funscriptPlayer = new FunscriptPlayerService();
-		_headTracker = GetNodeOrNull<HeadTrackerService>("HeadTracker");
-		
-		// 2. 关键修复：如果在 VR 模式下，必须禁用鼠标视角控制！
-		if (xrInterface != null && xrInterface.IsInitialized())
-		{
-			_headTracker?.SetEnabled(false); 
-		}
 		_videoManager = new VideoManager();
 		AddChild(_videoManager);
 
 		_funscriptPlayer = new FunscriptPlayerService();
 
 		_headTracker = GetNodeOrNull<HeadTrackerService>("HeadTracker");
-		_uiPanel = GetNodeOrNull<VrPanel3D>("VrPanel3D");
+
+		_subViewport = GetNodeOrNull<SubViewport>("SubViewport");
+		_uiMesh = GetNodeOrNull<MeshInstance3D>("UIMesh");
 
 		_sphereMeshInstance = GetNodeOrNull<MeshInstance3D>("SphereMesh");
 		_flatMeshInstance = GetNodeOrNull<MeshInstance3D>("FlatMesh");
@@ -82,9 +81,10 @@ public partial class VRPlayer : Node
 		SetupFlatMesh();
 		SetupShaders();
 
-		_videoManager?.SetupVideoPlayers(this);
+		SetupUIMeshMaterial();
+		SetupUIPointers();
 
-		SetupOverlay();
+	SetupOverlay();
 
 		SetupVideoEvents();
 		SetupFunscriptEvents();
@@ -97,37 +97,38 @@ public partial class VRPlayer : Node
 
 		if (_scriptPath != null)
 			_ = LoadScriptAsync(_scriptPath);
-		
-		// 修复安卓端 UI 紫块和显示问题
-		var subViewport = GetNodeOrNull<SubViewport>("SubViewport");
-		var uiMesh = GetNodeOrNull<MeshInstance3D>("UIMesh");
-		if (uiMesh != null && subViewport != null)
+	}
+
+	private void SetupUIMeshMaterial()
+	{
+		if (_uiMesh != null && _subViewport != null)
 		{
-			var mat = new StandardMaterial3D();
-			mat.ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded;
-			mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha; // 允许背景透明，不遮挡视频
-			mat.AlbedoTexture = subViewport.GetTexture();
-			uiMesh.MaterialOverride = mat;
+			var quad = new QuadMesh();
+			quad.Size = new Vector2(1.6f, 1.2f);
+			_uiMesh.Mesh = quad;
+
+			var mat = new StandardMaterial3D
+			{
+				ShadingMode = StandardMaterial3D.ShadingModeEnum.Unshaded,
+				Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+				AlbedoTexture = _subViewport.GetTexture(),
+				CullMode = BaseMaterial3D.CullModeEnum.Disabled
+			};
+			_uiMesh.MaterialOverride = mat;
 		}
+	}
+
+	private void SetupUIPointers()
+	{
+		_rightPointer = GetNodeOrNull<UIPointer>("XROrigin3D/XRController3DRight");
 	}
 
 	private void SetupOverlay()
 	{
-		if (_uiPanel == null) return;
-
-		var overlayScene = ResourceLoader.Load<PackedScene>("res://Scenes/VrOverlay.tscn");
-		if (overlayScene == null) return;
-
-		var overlayControl = overlayScene.Instantiate<Control>();
-		_uiPanel.SetContent(overlayControl);
-
-		_overlay = overlayControl as VrOverlay;
-		if (_overlay == null)
-			_overlay = overlayControl.GetNodeOrNull<VrOverlay>(".");
-
+		_overlay = GetNodeOrNull<VrOverlay>("SubViewport/VrOverlay");
 		if (_overlay == null)
 		{
-			GD.PrintErr("[VRPlayer] Failed to get VrOverlay from instantiated scene.");
+			GD.PrintErr("[VRPlayer] Failed to find VrOverlay under SubViewport.");
 			return;
 		}
 
@@ -188,6 +189,8 @@ public partial class VRPlayer : Node
 		if (_sphereMeshInstance != null) _sphereMeshInstance.Visible = isSphere;
 		if (_flatMeshInstance != null) _flatMeshInstance.Visible = !isSphere;
 
+		_sphereMaterial?.SetShaderParameter("projection_mode", (int)newFormat);
+
 		_overlay?.SetFormat(newFormat);
 		_overlay?.ResetHideTimer();
 		_overlay?.UpdateState(
@@ -235,11 +238,10 @@ public partial class VRPlayer : Node
 			var sphereShader = ResourceLoader.Load<Shader>("res://Resources/Shaders/video_sphere.gdshader");
 			if (sphereShader != null)
 			{
-				var shaderMat = new ShaderMaterial();
-				shaderMat.Shader = sphereShader;
-				shaderMat.SetShaderParameter("projection_mode", (int)_currentFormat);
-				_sphereMeshInstance.MaterialOverride = shaderMat;
-				_videoManager?.SetSphereMaterial(shaderMat);
+				_sphereMaterial = new ShaderMaterial();
+				_sphereMaterial.Shader = sphereShader;
+				_sphereMaterial.SetShaderParameter("projection_mode", (int)_currentFormat);
+				_sphereMeshInstance.MaterialOverride = _sphereMaterial;
 			}
 		}
 
@@ -248,12 +250,13 @@ public partial class VRPlayer : Node
 			var flatShader = ResourceLoader.Load<Shader>("res://Resources/Shaders/video_flat.gdshader");
 			if (flatShader != null)
 			{
-				var flatMat = new ShaderMaterial();
-				flatMat.Shader = flatShader;
-				_flatMeshInstance.MaterialOverride = flatMat;
-				_videoManager?.SetFlatMaterial(flatMat);
+				_flatMaterial = new ShaderMaterial();
+				_flatMaterial.Shader = flatShader;
+				_flatMeshInstance.MaterialOverride = _flatMaterial;
 			}
 		}
+
+		_videoManager?.SetShaderMaterials(_sphereMaterial, _flatMaterial);
 	}
 
 	private void SetupVideoEvents()
@@ -339,14 +342,13 @@ public partial class VRPlayer : Node
 			quad.Size = new Vector2(newWidth, baseHeight);
 			_flatMeshInstance.Mesh = quad;
 		}
-		else if (_currentFormat != VideoFormat.Flat && _sphereMeshInstance != null)
-		{
-			if (_currentFormat == VideoFormat.Stereo360)
-			{
-				var mat = _sphereMeshInstance.MaterialOverride as ShaderMaterial;
-				mat?.SetShaderParameter("eye_offset", -0.032);
-			}
-		}
+	}
+
+	public void PlayVideo(string absolutePath)
+	{
+		_videoPath = absolutePath;
+		if (_videoManager != null)
+			LoadVideo(absolutePath);
 	}
 
 	public override void _Input(InputEvent @event)

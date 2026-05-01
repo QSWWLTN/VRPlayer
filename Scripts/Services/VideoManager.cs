@@ -1,411 +1,406 @@
 using Godot;
-using VRPlayerProject.Models;
+using VRPlayerProject.Native;
 
 namespace VRPlayerProject.Services;
 
 public partial class VideoManager : Node
 {
-    private VideoStreamPlayer? _videoPlayer;
-    private VideoStreamPlayer? _videoPlayerRight;
-    private ShaderMaterial? _sphereMaterial;
-    private ShaderMaterial? _flatMaterial;
+	private GoZenVideo? _video;
+	private ShaderMaterial? _sphereMaterial;
+	private ShaderMaterial? _flatMaterial;
 
-    public VideoStreamPlayer? MainPlayer => _videoPlayer;
-    public double DurationMs { get; private set; }
-    public double PositionMs { get; private set; }
-    public int VideoWidth { get; private set; }
-    public int VideoHeight { get; private set; }
+	private ImageTexture? _yTexture;
+	private ImageTexture? _uTexture;
+	private ImageTexture? _vTexture;
 
-    public PlaybackState State { get; private set; } = PlaybackState.Idle;
-    public VideoFormat CurrentFormat { get; private set; } = VideoFormat.Mono360;
+	private AudioStreamPlayer? _audioPlayer;
+	private AudioStreamFFmpeg? _audioStream;
 
-    private double _seekTargetMs = -1;
-    private bool _dimensionsRead;
-    private int _durationReadAttempts;
+	private bool _texturesDirty;
 
-    public event Action<double>? OnPositionChanged;
-    public event Action<PlaybackState>? OnStateChanged;
-    public event Action<string>? OnLog;
-    public event Action<int, int>? OnDimensionsChanged;
+	public double DurationMs { get; private set; }
+	public double PositionMs { get; private set; }
+	public int VideoWidth { get; private set; }
+	public int VideoHeight { get; private set; }
 
-    public override void _Ready()
-    {
-        GD.Print("[VideoManager] Initialized.");
-    }
+	public PlaybackState State { get; private set; } = PlaybackState.Idle;
+	public VideoFormat CurrentFormat { get; private set; } = VideoFormat.Mono360;
 
-    public void SetupVideoPlayers(Node parent)
-    {
-        _videoPlayer = new VideoStreamPlayer();
-        _videoPlayer.Name = "VideoPlayer";
-        _videoPlayer.Size = new Vector2(1920, 1080);
-        parent.AddChild(_videoPlayer);
+	private double _speed = 1.0;
+	private double _frameTime;
+	private double _accumulator;
+	private int _currentFrame;
+	private int _frameCount;
+	private double _seekTargetMs = -1;
 
-        _videoPlayerRight = new VideoStreamPlayer();
-        _videoPlayerRight.Name = "VideoPlayerRight";
-        _videoPlayerRight.Size = new Vector2(1920, 1080);
-        parent.AddChild(_videoPlayerRight);
-        _videoPlayerRight.Visible = false;
-    }
+	public event Action<double>? OnPositionChanged;
+	public event Action<PlaybackState>? OnStateChanged;
+	public event Action<string>? OnLog;
+	public event Action<int, int>? OnDimensionsChanged;
 
-    public void SetSphereMaterial(ShaderMaterial material) => _sphereMaterial = material;
-    public void SetFlatMaterial(ShaderMaterial material) => _flatMaterial = material;
+	public override void _Ready()
+	{
+		GD.Print("[VideoManager] Initialized with gde_gozen.");
+	}
 
-    public void SwitchFormat(VideoFormat format)
-    {
-        CurrentFormat = format;
-        if (_videoPlayerRight != null)
-            _videoPlayerRight.Visible = format == VideoFormat.Stereo360;
-    }
+	public void SetShaderMaterials(ShaderMaterial sphereMaterial, ShaderMaterial flatMaterial)
+	{
+		_sphereMaterial = sphereMaterial;
+		_flatMaterial = flatMaterial;
+	}
 
-    public bool LoadFile(string path, VideoFormat format)
-    {
-        if (string.IsNullOrEmpty(path) || _videoPlayer == null)
-        {
-            SetErrorState();
-            return false;
-        }
+	public void SwitchFormat(VideoFormat format)
+	{
+		CurrentFormat = format;
+		if (_sphereMaterial != null)
+			_sphereMaterial.SetShaderParameter("projection_mode", (int)format);
+	}
 
-        CurrentFormat = format;
-        State = PlaybackState.Loading;
-        OnStateChanged?.Invoke(State);
+	public bool LoadFile(string path, VideoFormat format)
+	{
+		if (string.IsNullOrEmpty(path))
+		{
+			SetErrorState();
+			return false;
+		}
 
-        SwitchFormat(format);
+		CloseVideo();
 
-        _videoPlayer.Stop();
-        _videoPlayer.Stream = null;
-        _videoPlayerRight?.Stop();
-        if (_videoPlayerRight != null) _videoPlayerRight.Stream = null;
+		CurrentFormat = format;
+		State = PlaybackState.Loading;
+		OnStateChanged?.Invoke(State);
 
-        string? resolvedPath = ResolvePathForPlayer(path);
-        if (resolvedPath == null)
-        {
-            OnLog?.Invoke($"File not found: {path}");
-            SetErrorState();
-            return false;
-        }
+		string? resolvedPath = ResolvePathForPlayer(path);
+		if (resolvedPath == null)
+		{
+			OnLog?.Invoke($"File not found: {path}");
+			SetErrorState();
+			return false;
+		}
 
-        var stream = CreateVideoStream(resolvedPath, path);
-        if (stream == null)
-        {
-            OnLog?.Invoke($"Cannot load video: {System.IO.Path.GetFileName(path)}");
-            SetErrorState();
-            return false;
-        }
+		_video = GoZenLib.CreateVideo();
+		if (_video == null)
+		{
+			OnLog?.Invoke("GoZenVideo not available.");
+			SetErrorState();
+			return false;
+		}
 
-        _videoPlayer.Stream = stream;
-        _videoPlayer.Autoplay = false;
+		if (_video.Open(resolvedPath) != (int)Error.Ok)
+		{
+			OnLog?.Invoke($"Cannot open video: {System.IO.Path.GetFileName(path)}");
+			CloseVideo();
+			SetErrorState();
+			return false;
+		}
 
-        VideoWidth = 0;
-        VideoHeight = 0;
-        _dimensionsRead = false;
+		_frameCount = _video.GetFrameCount();
+		float framerate = _video.GetFramerate();
+		if (framerate <= 0) framerate = 30f;
+		_frameTime = 1.0 / framerate;
 
-        if (CurrentFormat == VideoFormat.Stereo360 && _videoPlayerRight != null)
-        {
-            var streamR = CreateVideoStream(resolvedPath, path);
-            if (streamR != null)
-            {
-                _videoPlayerRight.Stream = streamR;
-                _videoPlayerRight.Autoplay = false;
-            }
-        }
+		var res = _video.GetResolution();
+		var actualRes = _video.GetActualResolution();
+		VideoWidth = res.X;
+		VideoHeight = res.Y;
+		int actualW = actualRes.X;
+		int actualH = actualRes.Y;
 
-        PositionMs = 0;
-        DurationMs = 0;
-        _durationReadAttempts = 0;
+		GD.Print($"[VideoManager] Video: {VideoWidth}x{VideoHeight} (actual: {actualW}x{actualH}), {framerate}fps, {_frameCount} frames");
 
-        State = PlaybackState.Paused;
-        OnStateChanged?.Invoke(State);
+		OnDimensionsChanged?.Invoke(VideoWidth, VideoHeight);
 
-        OnLog?.Invoke($"Loaded: {System.IO.Path.GetFileName(path)}");
-        return true;
-    }
+		string colorProfile = _video.GetColorProfile();
+		bool fullRange = _video.IsFullColorRange();
+		var cp = GoZenLib.GetColorProfileVector(colorProfile);
 
-    private bool TryReadDimensions()
-    {
-        if (_videoPlayer == null) return false;
+		ApplyShaderSettings(cp, fullRange, new Vector2(actualW, actualH));
 
-        try
-        {
-            var tex = _videoPlayer.GetVideoTexture();
-            if (tex != null)
-            {
-                int newW = tex.GetWidth();
-                int newH = tex.GetHeight();
-                if (newW > 0 && newH > 0)
-                {
-                    if (newW != VideoWidth || newH != VideoHeight)
-                    {
-                        VideoWidth = newW;
-                        VideoHeight = newH;
-                        GD.Print($"[VideoManager] Video dimensions: {VideoWidth}x{VideoHeight}");
-                        OnDimensionsChanged?.Invoke(VideoWidth, VideoHeight);
-                    }
-                    return true;
-                }
-            }
-        }
-        catch { }
+		_video.SeekFrame(0);
+		_video.NextFrame();
+		CreateTextures();
+		UpdateTexturesFromVideo();
+		UpdateShaderTextures();
 
-        return false;
-    }
+		_currentFrame = 0;
+		_accumulator = 0;
+		PositionMs = 0;
+		DurationMs = (_frameCount / (double)framerate) * 1000.0;
 
-    private bool TryReadDuration()
-    {
-        if (_videoPlayer == null) return false;
+		SetupAudio(resolvedPath);
 
-        try
-        {
-            double lengthSec = _videoPlayer.GetStreamLength();
-            if (lengthSec > 0)
-            {
-                double newDurMs = lengthSec * 1000.0;
-                if (Math.Abs(newDurMs - DurationMs) > 100)
-                {
-                    DurationMs = newDurMs;
-                    GD.Print($"[VideoManager] Duration: {lengthSec:F1}s");
-                }
-                return true;
-            }
-        }
-        catch { }
+		State = PlaybackState.Paused;
+		OnStateChanged?.Invoke(State);
 
-        return false;
-    }
+		OnLog?.Invoke($"Loaded: {System.IO.Path.GetFileName(path)}");
+		return true;
+	}
 
-    private void SetErrorState()
-    {
-        State = PlaybackState.Error;
-        OnStateChanged?.Invoke(State);
-    }
+	private void ApplyShaderSettings(Vector4 colorProfile, bool fullRange, Vector2 yuvRes)
+	{
+		foreach (var mat in new[] { _sphereMaterial, _flatMaterial })
+		{
+			if (mat == null) continue;
+			mat.SetShaderParameter("color_profile", colorProfile);
+			mat.SetShaderParameter("full_color_range", fullRange);
+			mat.SetShaderParameter("yuv_resolution", yuvRes);
+			mat.SetShaderParameter("projection_mode", (int)CurrentFormat);
+		}
+	}
 
-    private static string? ResolvePathForPlayer(string path)
-    {
-        if (Godot.FileAccess.FileExists(path))
-            return ProjectSettings.GlobalizePath(path);
+	private void CreateTextures()
+	{
+		_yTexture?.Dispose();
+		_uTexture?.Dispose();
+		_vTexture?.Dispose();
 
-        try
-        {
-            string cacheDir = ProjectSettings.GlobalizePath("user://video_cache/");
-            System.IO.Directory.CreateDirectory(cacheDir);
-            string dest = System.IO.Path.Combine(cacheDir, System.IO.Path.GetFileName(path));
-            if (System.IO.File.Exists(dest)) return dest;
-        }
-        catch { }
+		var yImg = _video!.GetYData();
+		var uImg = _video.GetUData();
+		var vImg = _video.GetVData();
 
-        return null;
-    }
+		_yTexture = ImageTexture.CreateFromImage(yImg);
+		_uTexture = ImageTexture.CreateFromImage(uImg);
+		_vTexture = ImageTexture.CreateFromImage(vImg);
+	}
 
-    private static VideoStream? CreateVideoStream(string filePath, string originalPath)
-    {
-        var ext = System.IO.Path.GetExtension(filePath).ToLowerInvariant();
-        bool isTheora = ext == ".ogv" || ext == ".ogg";
+	private void UpdateTexturesFromVideo()
+	{
+		if (_video == null || !_video.IsOpen()) return;
 
-        string streamPath = filePath.Replace("\\", "/");
+		_yTexture?.Update(_video.GetYData());
+		_uTexture?.Update(_video.GetUData());
+		_vTexture?.Update(_video.GetVData());
+		_texturesDirty = true;
+	}
 
-        if (HasUnicodeOrSpace(originalPath))
-        {
-            try
-            {
-                string cacheDir = ProjectSettings.GlobalizePath("user://video_cache/");
-                System.IO.Directory.CreateDirectory(cacheDir);
-                string safeName = $"__vr_{System.IO.Path.GetFileNameWithoutExtension(originalPath)}_{originalPath.GetHashCode():X8}{ext}";
-                foreach (char c in System.IO.Path.GetInvalidFileNameChars())
-                    safeName = safeName.Replace(c.ToString(), "_");
-                string dest = System.IO.Path.Combine(cacheDir, safeName);
-                if (!System.IO.File.Exists(dest))
-                {
-                    using var src = Godot.FileAccess.Open(originalPath, Godot.FileAccess.ModeFlags.Read);
-                    if (src != null)
-                    {
-                        var data = src.GetBuffer((long)src.GetLength());
-                        System.IO.File.WriteAllBytes(dest, data);
-                    }
-                }
-                streamPath = $"user://video_cache/{safeName}";
-            }
-            catch (Exception ex)
-            {
-                GD.PrintErr($"[VideoManager] Path copy failed: {ex.Message}");
-            }
-        }
+	private void UpdateShaderTextures()
+	{
+		if (!_texturesDirty) return;
 
-        if (isTheora)
-        {
-            var t = new VideoStreamTheora();
-            t.File = streamPath;
-            return t;
-        }
+		foreach (var mat in new[] { _sphereMaterial, _flatMaterial })
+		{
+			if (mat == null) continue;
+			mat.SetShaderParameter("y_data", _yTexture);
+			mat.SetShaderParameter("u_data", _uTexture);
+			mat.SetShaderParameter("v_data", _vTexture);
+		}
 
-        try
-        {
-            var ffmpegObj = Godot.ClassDB.Instantiate("FFmpegVideoStream");
-            if (ffmpegObj.VariantType != Variant.Type.Nil)
-            {
-                var ffmpegStream = ffmpegObj.AsGodotObject() as VideoStream;
-                if (ffmpegStream != null)
-                {
-                    ffmpegStream.Set("file", streamPath);
-                    return ffmpegStream;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            GD.PrintErr($"[VideoManager] FFmpegVideoStream creation failed: {ex.Message}");
-        }
+		_texturesDirty = false;
+	}
 
-        try
-        {
-            var videoStream = ResourceLoader.Load<VideoStream>(streamPath);
-            if (videoStream != null) return videoStream;
-        }
-        catch { }
+	private void SetupAudio(string resolvedPath)
+	{
+		_audioPlayer?.QueueFree();
+		_audioStream = null;
 
-        GD.PrintErr($"[VideoManager] Cannot create stream for: {filePath}");
-        return null;
-    }
+		_audioStream = new AudioStreamFFmpeg();
+		if (_audioStream.Open(resolvedPath) != (int)Error.Ok)
+		{
+			GD.PrintErr("[VideoManager] Failed to open audio stream.");
+			_audioStream = null;
+			return;
+		}
 
-    private static bool HasUnicodeOrSpace(string path)
-    {
-        foreach (char c in path)
-        {
-            if (c > 127 || c == ' ') return true;
-        }
-        return false;
-    }
+		_audioPlayer = new AudioStreamPlayer();
+		_audioPlayer.Stream = _audioStream;
+		_audioPlayer.Bus = "Master";
+		AddChild(_audioPlayer);
+	}
 
-    public void Play()
-    {
-        if (_videoPlayer?.Stream == null)
-        {
-            SetErrorState();
-            return;
-        }
+	private void CloseVideo()
+	{
+		if (_video != null)
+		{
+			_video.Close();
+			_video = null;
+		}
 
-        _videoPlayer.Play();
-        _videoPlayerRight?.Play();
-        State = PlaybackState.Playing;
-        OnStateChanged?.Invoke(State);
-    }
+		if (_audioPlayer != null)
+		{
+			_audioPlayer.Stop();
+			_audioPlayer.QueueFree();
+			_audioPlayer = null;
+		}
+		_audioStream = null;
 
-    public void Pause()
-    {
-        if (_videoPlayer != null)
-            _videoPlayer.Paused = true;
-        if (_videoPlayerRight != null)
-            _videoPlayerRight.Paused = true;
-        State = PlaybackState.Paused;
-        OnStateChanged?.Invoke(State);
-    }
+		_yTexture?.Dispose();
+		_uTexture?.Dispose();
+		_vTexture?.Dispose();
+		_yTexture = null;
+		_uTexture = null;
+		_vTexture = null;
+		_texturesDirty = false;
+	}
 
-    public void Resume()
-    {
-        if (_videoPlayer?.Stream == null) return;
+	private void SetErrorState()
+	{
+		State = PlaybackState.Error;
+		OnStateChanged?.Invoke(State);
+	}
 
-        if (_videoPlayer != null)
-            _videoPlayer.Paused = false;
-        if (_videoPlayerRight != null)
-            _videoPlayerRight.Paused = false;
-        State = PlaybackState.Playing;
-        OnStateChanged?.Invoke(State);
-    }
+	private static string? ResolvePathForPlayer(string path)
+	{
+		if (Godot.FileAccess.FileExists(path))
+			return ProjectSettings.GlobalizePath(path);
 
-    public void TogglePlayPause()
-    {
-        if (State == PlaybackState.Playing) Pause();
-        else Resume();
-    }
+		try
+		{
+			string cacheDir = ProjectSettings.GlobalizePath("user://video_cache/");
+			System.IO.Directory.CreateDirectory(cacheDir);
+			string dest = System.IO.Path.Combine(cacheDir, System.IO.Path.GetFileName(path));
+			if (System.IO.File.Exists(dest)) return dest;
+		}
+		catch { }
 
-    public void Stop()
-    {
-        _videoPlayer?.Stop();
-        _videoPlayerRight?.Stop();
-        State = PlaybackState.Idle;
-        OnStateChanged?.Invoke(State);
-    }
+		return null;
+	}
 
-    public void SeekTo(double ms)
-    {
-        double seconds = ms / 1000.0;
-        if (_videoPlayer != null) _videoPlayer.StreamPosition = seconds;
-        if (_videoPlayerRight != null) _videoPlayerRight.StreamPosition = seconds;
-        PositionMs = ms;
-        _seekTargetMs = ms;
-        OnPositionChanged?.Invoke(PositionMs);
-    }
+	public void Play()
+	{
+		if (_video == null || !_video.IsOpen())
+		{
+			SetErrorState();
+			return;
+		}
 
-    public void SetSpeed(double speed)
-    {
-        if (_videoPlayer != null)
-            _videoPlayer.SpeedScale = (float)speed;
-        if (_videoPlayerRight != null)
-            _videoPlayerRight.SpeedScale = (float)speed;
-    }
+		if (_audioPlayer != null && _audioPlayer.Stream != null)
+		{
+			_audioPlayer.Play((float)(_currentFrame * _frameTime));
+		}
 
-    public override void _Process(double delta)
-    {
-        if (_videoPlayer == null) return;
+		State = PlaybackState.Playing;
+		OnStateChanged?.Invoke(State);
+	}
 
-        if (_videoPlayer.Stream != null)
-        {
-            var tex = _videoPlayer.GetVideoTexture();
-            if (tex != null)
-            {
-                if (_sphereMaterial != null)
-                    _sphereMaterial.SetShaderParameter("video_texture", tex);
-                if (_flatMaterial != null)
-                    _flatMaterial.SetShaderParameter("video_texture", tex);
-            }
-        }
+	public void Pause()
+	{
+		if (_audioPlayer != null)
+			_audioPlayer.StreamPaused = true;
 
-        if (State == PlaybackState.Playing || (State == PlaybackState.Paused && _seekTargetMs >= 0))
-        {
-            double posSec = _videoPlayer.GetStreamPosition();
-            double newPosMs = posSec * 1000.0;
+		State = PlaybackState.Paused;
+		OnStateChanged?.Invoke(State);
+	}
 
-            if (_seekTargetMs >= 0)
-            {
-                if (Math.Abs(newPosMs - _seekTargetMs) < 500)
-                {
-                    _seekTargetMs = -1;
-                    PositionMs = newPosMs;
-                }
-                else
-                {
-                    PositionMs = _seekTargetMs;
-                }
-            }
-            else
-            {
-                PositionMs = newPosMs;
-            }
+	public void Resume()
+	{
+		if (_video == null || !_video.IsOpen()) return;
 
-            OnPositionChanged?.Invoke(PositionMs);
+		if (_audioPlayer != null)
+			_audioPlayer.StreamPaused = false;
 
-            if (State == PlaybackState.Paused)
-                return;
+		State = PlaybackState.Playing;
+		OnStateChanged?.Invoke(State);
+	}
 
-            if (!_videoPlayer.IsPlaying())
-            {
-                State = PlaybackState.Ended;
-                OnStateChanged?.Invoke(State);
-            }
-        }
+	public void TogglePlayPause()
+	{
+		if (State == PlaybackState.Playing) Pause();
+		else Resume();
+	}
 
-        if (!_dimensionsRead && _videoPlayer.Stream != null && State != PlaybackState.Idle)
-        {
-            _dimensionsRead = TryReadDimensions();
-        }
+	public void Stop()
+	{
+		if (_audioPlayer != null)
+			_audioPlayer.Stop();
 
-        if (DurationMs <= 0 && _videoPlayer.Stream != null && State != PlaybackState.Idle)
-        {
-            _durationReadAttempts++;
-            TryReadDuration();
-        }
-    }
+		State = PlaybackState.Idle;
+		OnStateChanged?.Invoke(State);
+	}
 
-    public override void _ExitTree()
-    {
-        Stop();
-    }
+	public void SeekTo(double ms)
+	{
+		if (_video == null || !_video.IsOpen() || _frameCount <= 0) return;
+
+		double framerate = 1.0 / _frameTime;
+		int targetFrame = (int)(ms / 1000.0 * framerate);
+		targetFrame = Mathf.Clamp(targetFrame, 0, _frameCount - 1);
+
+		_seekTargetMs = ms;
+		_currentFrame = targetFrame;
+		_accumulator = 0;
+
+		_video.SeekFrame(targetFrame);
+		_video.NextFrame();
+		UpdateTexturesFromVideo();
+
+		if (_audioPlayer != null && _audioPlayer.Stream != null)
+		{
+			_audioPlayer.Play((float)(_currentFrame * _frameTime));
+			_audioPlayer.StreamPaused = State != PlaybackState.Playing;
+		}
+
+		PositionMs = (_currentFrame / framerate) * 1000.0;
+		OnPositionChanged?.Invoke(PositionMs);
+	}
+
+	public void SetSpeed(double speed)
+	{
+		_speed = Mathf.Clamp(speed, 0.25, 4.0);
+
+		if (_audioPlayer != null)
+			_audioPlayer.PitchScale = (float)_speed;
+	}
+
+	public override void _Process(double delta)
+	{
+		if (_video == null || !_video.IsOpen()) return;
+
+		if (State == PlaybackState.Playing)
+		{
+			_accumulator += delta * _speed;
+
+			while (_accumulator >= _frameTime && _currentFrame < _frameCount - 1)
+			{
+				_accumulator -= _frameTime;
+				_currentFrame++;
+				_video.NextFrame();
+			}
+
+			if (_currentFrame >= _frameCount - 1)
+			{
+				State = PlaybackState.Ended;
+				OnStateChanged?.Invoke(State);
+				if (_audioPlayer != null)
+					_audioPlayer.StreamPaused = true;
+			}
+
+			UpdateTexturesFromVideo();
+
+			double framerate = 1.0 / _frameTime;
+			PositionMs = (_currentFrame / framerate) * 1000.0;
+			OnPositionChanged?.Invoke(PositionMs);
+
+			SyncAudio();
+		}
+
+		UpdateShaderTextures();
+	}
+
+	private void SyncAudio()
+	{
+		if (_audioPlayer == null || _audioPlayer.Stream == null)
+			return;
+
+		if (!_audioPlayer.Playing)
+		{
+			_audioPlayer.Play((float)(_currentFrame * _frameTime));
+			_audioPlayer.PitchScale = (float)_speed;
+		}
+
+		double expectedSec = _currentFrame * _frameTime;
+		double actualSec = _audioPlayer.GetPlaybackPosition() +
+						   AudioServer.GetTimeSinceLastMix();
+		double offset = actualSec - expectedSec;
+
+		if (Mathf.Abs(offset) > 0.1)
+		{
+			_audioPlayer.Play((float)expectedSec);
+			_audioPlayer.PitchScale = (float)_speed;
+		}
+	}
+
+	public override void _ExitTree()
+	{
+		CloseVideo();
+	}
 }

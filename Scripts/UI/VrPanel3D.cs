@@ -11,11 +11,13 @@ public partial class VrPanel3D : Node3D
 	private QuadMesh _quadMesh = null!;
 	private ShaderMaterial _panelMaterial = null!;
 
-	private Vector2 _panelWorldSize = new(3.2f, 1.8f);
-	private Vector2I _viewportResolution = new(1280, 720);
-	private float _distanceFromCamera = 4.0f;
-	private bool _followCamera = true;
-	private bool _billboard = true;
+    private Vector2 _panelWorldSize = new(3.2f, 1.8f);
+    private Vector2I _viewportResolution = new(1280, 720);
+    private float _distanceFromCamera = 4.0f;
+    private bool _followCamera = true;
+    private bool _billboard = true;
+
+    private double _lastClickTimeMs;
 
 	public SubViewport Viewport => _subViewport;
 	public MeshInstance3D PanelMesh => _panelMesh;
@@ -220,29 +222,40 @@ void fragment() {
 		}
 	}
 
-	private void OnPanelInputEvent(Node camera, InputEvent @event, Vector3 position, Vector3 normal, long shapeIdx)
-	{
-		if (@event is InputEventMouseButton mouseButton)
-		{
-			var viewportPos = WorldToPanelUV(position);
-			var forwarded = new InputEventMouseButton
-			{
-				ButtonIndex = mouseButton.ButtonIndex,
-				Pressed = mouseButton.Pressed,
-				Position = viewportPos
-			};
-			_subViewport.PushInput(forwarded);
-		}
-		else if (@event is InputEventMouseMotion mouseMotion)
-		{
-			var viewportPos = WorldToPanelUV(position);
-			var forwarded = new InputEventMouseMotion
-			{
-				Position = viewportPos
-			};
-			_subViewport.PushInput(forwarded);
-		}
-	}
+    private void OnPanelInputEvent(Node camera, InputEvent @event, Vector3 position, Vector3 normal, long shapeIdx)
+    {
+        if (@event is InputEventMouseButton mouseButton)
+        {
+            var viewportPos = WorldToPanelUV(position);
+
+            bool isDoubleClick = false;
+            if (mouseButton.Pressed)
+            {
+                double now = Time.GetTicksMsec();
+                if (now - _lastClickTimeMs < 350.0)
+                    isDoubleClick = true;
+                _lastClickTimeMs = now;
+            }
+
+            var forwarded = new InputEventMouseButton
+            {
+                ButtonIndex = mouseButton.ButtonIndex,
+                Pressed = mouseButton.Pressed,
+                Position = viewportPos,
+                DoubleClick = isDoubleClick
+            };
+            _subViewport.PushInput(forwarded);
+        }
+        else if (@event is InputEventMouseMotion mouseMotion)
+        {
+            var viewportPos = WorldToPanelUV(position);
+            var forwarded = new InputEventMouseMotion
+            {
+                Position = viewportPos
+            };
+            _subViewport.PushInput(forwarded);
+        }
+    }
 
 	private Vector2 WorldToPanelUV(Vector3 worldHit)
 	{

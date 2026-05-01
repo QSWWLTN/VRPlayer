@@ -1,8 +1,42 @@
 shader_type spatial;
 render_mode cull_front, unshaded, depth_draw_never, blend_mix;
 
-uniform sampler2D video_texture : filter_linear, repeat_disable;
+uniform sampler2D y_data : filter_linear, repeat_disable;
+uniform sampler2D u_data : filter_linear, repeat_disable;
+uniform sampler2D v_data : filter_linear, repeat_disable;
+uniform vec2 yuv_resolution = vec2(1920.0, 1080.0);
+uniform vec4 color_profile = vec4(1.5748, 0.1873, 0.4681, 1.8556);
+uniform bool full_color_range = true;
 uniform int projection_mode = 3;
+
+vec3 yuv_to_rgb(float y, float u, float v) {
+	float Y, U, V;
+	if (full_color_range) {
+		Y = y;
+		U = u - 0.5;
+		V = v - 0.5;
+	} else {
+		Y = (y * 255.0 - 16.0) / 219.0;
+		U = (u * 255.0 - 128.0) / 224.0;
+		V = (v * 255.0 - 128.0) / 224.0;
+	}
+	float R = Y + color_profile.x * V;
+	float G = Y - color_profile.y * U - color_profile.z * V;
+	float B = Y + color_profile.w * U;
+	return vec3(R, G, B);
+}
+
+vec3 sample_yuv(vec2 uv) {
+	vec2 y_uv = uv * yuv_resolution / vec2(textureSize(y_data, 0));
+	y_uv = clamp(y_uv, vec2(0.0), vec2(1.0));
+	vec2 c_uv = uv * (yuv_resolution / 2.0) / vec2(textureSize(u_data, 0));
+	c_uv = clamp(c_uv, vec2(0.0), vec2(1.0));
+
+	float y = texture(y_data, y_uv).r;
+	float u = texture(u_data, c_uv).r;
+	float v = texture(v_data, c_uv).r;
+	return yuv_to_rgb(y, u, v);
+}
 
 void fragment() {
 	vec3 world_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -13,13 +47,11 @@ void fragment() {
 	vec2 uv = vec2(0.0);
 	bool show = false;
 
-	// Mode 1: 180° 2D (单眼)
 	if (projection_mode == 1) {
 		if (theta >= -1.5707963 && theta <= 1.5707963) {
 			uv = vec2((theta + 1.5707963) / 3.14159265, phi / 3.14159265);
 			show = true;
 		}
-	// Mode 2: 鱼眼 180°
 	} else if (projection_mode == 2) {
 		vec3 fwd = vec3(0.0, 0.0, -1.0);
 		float cos_angle = dot(dir, fwd);
@@ -29,40 +61,36 @@ void fragment() {
 				float phi2 = atan(dir.y, dir.x);
 				float r = (angle / 1.5707963) * 0.5;
 				uv = vec2(0.5, 0.5) + r * vec2(cos(phi2), sin(phi2));
-				if (length(uv - vec2(0.5, 0.5)) <= 0.5) show = true;
+				if (length(uv - vec2(0.5, 0.5)) <= 0.5) {
+					show = true;
+				}
 			}
 		}
-	// Mode 3: 360° 2D (单眼)
 	} else if (projection_mode == 3) {
 		uv = vec2(theta / 6.2831853 + 0.5, phi / 3.14159265);
 		show = true;
-	// Mode 4: 360° 3D 立体 (上下格式 Top-Bottom)
 	} else if (projection_mode == 4) {
 		uv = vec2(theta / 6.2831853 + 0.5, phi / 3.14159265);
-		// 关键修复：使用 int() 强制转换，避免 OpenGL ES 的严格类型报错
 		if (int(VIEW_INDEX) == 0) {
-			uv.y = uv.y * 0.5; // 左眼读取视频上半部分
+			uv.y = uv.y * 0.5;
 		} else {
-			uv.y = uv.y * 0.5 + 0.5; // 右眼读取视频下半部分
+			uv.y = uv.y * 0.5 + 0.5;
 		}
 		show = true;
-	// Mode 5: 180° 3D 立体 (左右格式 Side-by-Side)
 	} else if (projection_mode == 5) {
 		if (theta >= -1.5707963 && theta <= 1.5707963) {
 			uv = vec2((theta + 1.5707963) / 3.14159265, phi / 3.14159265);
-			// 关键修复：使用 int() 强制转换
 			if (int(VIEW_INDEX) == 0) {
-				uv.x = uv.x * 0.5; // 左眼读取视频左半部分
+				uv.x = uv.x * 0.5;
 			} else {
-				uv.x = uv.x * 0.5 + 0.5; // 右眼读取视频右半部分
+				uv.x = uv.x * 0.5 + 0.5;
 			}
 			show = true;
 		}
 	}
 
 	if (show) {
-		vec4 color = texture(video_texture, uv);
-		ALBEDO = color.rgb;
+		ALBEDO = sample_yuv(uv);
 		ALPHA = 1.0;
 	} else {
 		ALBEDO = vec3(0.0);

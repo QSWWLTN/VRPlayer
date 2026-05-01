@@ -2,36 +2,36 @@ namespace VRPlayerProject;
 
 public enum VideoFormat
 {
-	Flat = 0,
-	Mono180 = 1,
-	Fisheye180 = 2,
-	Mono360 = 3,
-	Stereo360 = 4,
-	Stereo180 = 5  // 新增 180° 3D 格式
+    Flat,
+    Mono180,
+    Fisheye180,
+    Mono360,
+    Stereo360,
+    Stereo180
 }
 
 public enum PlaybackState
 {
-	Idle,
-	Loading,
-	Playing,
-	Paused,
-	Ended,
-	Error
+    Idle,
+    Loading,
+    Playing,
+    Paused,
+    Ended,
+    Error
 }
 
 public enum ProtocolType
 {
-	TCode,
-	Raw
+    TCode,
+    Raw
 }
 
 public enum SyncState
 {
-	Idle,
-	Syncing,
-	InSync,
-	Paused,
-	Finished,
-	Error
+    Idle,
+    Syncing,
+    InSync,
+    Paused,
+    Finished,
+    Error
 }

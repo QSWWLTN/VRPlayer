@@ -16,17 +16,9 @@ run/main_scene="uid://dq0xqry2dcqoa"
 config/features=PackedStringArray("4.6", "C#", "Mobile")
 config/icon="res://icon.svg"
 
-[autoload]
-
-ExoPlayer="*uid://chg3c0d5g5oyc"
-
 [dotnet]
 
 project/assembly_name="VRPlayerProject"
-
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/godot_exoplayer/plugin.cfg")
 
 [physics]
 
