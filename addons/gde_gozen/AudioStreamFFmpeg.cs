@@ -1,17 +1,9 @@
 using Godot;
 using Godot.Collections;
-using System;
-using System.Collections.Generic;
 
 public partial class AudioStreamFFmpeg : AudioStream
 {
     private Variant _backer;
-
-	public bool UseIcy
-	{
-		get => _backer.AsGodotObject().Get("use_icy").AsBool();
-		set => _backer.AsGodotObject().Set("use_icy", value);
-	}
 
     public AudioStreamFFmpeg()
     {
@@ -23,16 +15,28 @@ public partial class AudioStreamFFmpeg : AudioStream
         _backer = hndl;
     }
 
-    public Error Open(string path, int streamIndex = -1) => _backer.AsGodotObject().Call("open", path, streamIndex).As<Error>();
+    private GodotObject? Obj()
+    {
+        if (_backer.VariantType == Variant.Type.Nil)
+            return null;
+        return _backer.AsGodotObject();
+    }
 
-	public Dictionary GetIcyHeaders() => _backer.AsGodotObject().Call("get_icy_headers").As<Dictionary>();
+    public bool UseIcy
+    {
+        get => Obj()?.Get("use_icy").AsBool() ?? false;
+        set => Obj()?.Set("use_icy", value);
+    }
 
-	public string GetStreamTitle() => _backer.AsGodotObject().Call("get_stream_title").AsString();
+    public Error Open(string path, int streamIndex = -1) =>
+        (Error)(Obj()?.Call("open", path, streamIndex).AsInt32() ?? -1);
 
-	public Dictionary GetTags() => _backer.AsGodotObject().Call("get_tags").As<Dictionary>();
+    public Dictionary GetIcyHeaders() => Obj()?.Call("get_icy_headers").As<Dictionary>() ?? new Dictionary();
+    public string GetStreamTitle() => Obj()?.Call("get_stream_title").AsString() ?? "";
+    public Dictionary GetTags() => Obj()?.Call("get_tags").As<Dictionary>() ?? new Dictionary();
 
-    public override AudioStreamPlayback _InstantiatePlayback() => _backer.AsGodotObject().Call("__instantiate_playback").As<AudioStreamPlayback>();
+    public override AudioStreamPlayback _InstantiatePlayback() =>
+        Obj()?.Call("__instantiate_playback").As<AudioStreamPlayback>();
 
-    public override double _GetLength() => _backer.AsGodotObject().Call("get_length").AsDouble();
-
+    public override double _GetLength() => Obj()?.Call("get_length").AsDouble() ?? 0.0;
 }

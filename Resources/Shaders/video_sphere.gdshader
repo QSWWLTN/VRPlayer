@@ -26,18 +26,6 @@ vec3 yuv_to_rgb(float y, float u, float v) {
 	return vec3(R, G, B);
 }
 
-vec3 sample_yuv(vec2 uv) {
-	vec2 y_uv = uv * yuv_resolution / vec2(textureSize(y_data, 0));
-	y_uv = clamp(y_uv, vec2(0.0), vec2(1.0));
-	vec2 c_uv = uv * (yuv_resolution / 2.0) / vec2(textureSize(u_data, 0));
-	c_uv = clamp(c_uv, vec2(0.0), vec2(1.0));
-
-	float y = texture(y_data, y_uv).r;
-	float u = texture(u_data, c_uv).r;
-	float v = texture(v_data, c_uv).r;
-	return yuv_to_rgb(y, u, v);
-}
-
 void fragment() {
 	vec3 world_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	vec3 dir = normalize(world_pos - CAMERA_POSITION_WORLD);
@@ -90,7 +78,10 @@ void fragment() {
 	}
 
 	if (show) {
-		ALBEDO = sample_yuv(uv);
+		float y = texture(y_data, uv).r;
+		float u = texture(u_data, uv).r;
+		float v = texture(v_data, uv).r;
+		ALBEDO = yuv_to_rgb(y, u, v);
 		ALPHA = 1.0;
 	} else {
 		ALBEDO = vec3(0.0);
