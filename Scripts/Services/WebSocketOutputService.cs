@@ -9,192 +9,188 @@ namespace VRPlayerProject.Services;
 
 public class WebSocketOutputService : IDisposable
 {
-	private ClientWebSocket? _ws;
-	private CancellationTokenSource? _cts;
-	private bool _disposed;
-	
-	// 核心修复：换回无阻塞的 ConcurrentQueue
-	private ConcurrentQueue<string>? _sendQueue;
+    private ClientWebSocket? _ws;
+    private CancellationTokenSource? _cts;
+    private bool _disposed;
+    private ConcurrentQueue<string>? _sendQueue;
 
-	public bool IsConnected => _ws?.State == WebSocketState.Open;
-	public string Host { get; private set; } = string.Empty;
-	public int Port { get; private set; } = 80;
-	public int SentCount { get; private set; }
-	public int ReceivedCount { get; private set; }
-	public bool IsConnecting { get; private set; }
+    // --- 新增：死区过滤记录 ---
+    private int _lastEnqueuedValue = -999;
+    private const int MinDeltaThreshold = 3; 
 
-	public event Action<string>? OnLog;
-	public event Action<bool>? OnConnectionChanged;
+    public bool IsConnected => _ws?.State == WebSocketState.Open;
+    public string Host { get; private set; } = string.Empty;
+    public int Port { get; private set; } = 80;
+    public int SentCount { get; private set; }
+    public int ReceivedCount { get; private set; }
+    public bool IsConnecting { get; private set; }
 
-	public void SetHost(string host) => Host = host;
-	public void SetPort(int port) => Port = port;
+    public event Action<string>? OnLog;
+    public event Action<bool>? OnConnectionChanged;
 
-	public async Task<bool> Connect(int timeoutMs = 5000)
-	{
-		if (IsConnecting) return false;
+    public void SetHost(string host) => Host = host;
+    public void SetPort(int port) => Port = port;
 
-		try
-		{
-			DisconnectInternal();
-			IsConnecting = true;
-			OnConnectionChanged?.Invoke(false);
+    public async Task<bool> Connect(int timeoutMs = 5000)
+    {
+        if (IsConnecting) return false;
+        DisconnectInternal();
+        IsConnecting = true;
+        OnConnectionChanged?.Invoke(false);
 
-			_ws = new ClientWebSocket();
-			_cts = new CancellationTokenSource(timeoutMs);
+        _ws = new ClientWebSocket();
+        // 增加心跳保活
+        _ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(5);
 
-			var uri = new Uri($"ws://{Host}:{Port}/ws"); 
-			//Log($"Connecting to {uri}...");
+        _cts = new CancellationTokenSource(timeoutMs);
+        var uri = new Uri($"ws://{Host}:{Port}/ws");
 
-			await _ws.ConnectAsync(uri, _cts.Token);
+        try
+        {
+            await _ws.ConnectAsync(uri, _cts.Token);
+            if (_ws.State != WebSocketState.Open)
+            {
+                IsConnecting = false;
+                DisconnectInternal();
+                return false;
+            }
 
-			if (_ws.State != WebSocketState.Open)
-			{
-				IsConnecting = false;
-				DisconnectInternal();
-				return false;
-			}
+            IsConnecting = false;
+            SentCount = 0;
+            ReceivedCount = 0;
+            _cts = new CancellationTokenSource();
+            _sendQueue = new ConcurrentQueue<string>();
+            _lastEnqueuedValue = -999;
 
-			IsConnecting = false;
-			SentCount = 0;
-			ReceivedCount = 0;
-			
-			_cts = new CancellationTokenSource();
-			_sendQueue = new ConcurrentQueue<string>();
+            Log($"WebSocket connected to {Host}:{Port}");
+            OnConnectionChanged?.Invoke(true);
 
-			Log($"WebSocket connected to {Host}:{Port}");
-			OnConnectionChanged?.Invoke(true);
+            _ = ReceiveLoopAsync(_cts.Token);
+            _ = SendLoopAsync(_cts.Token);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            IsConnecting = false;
+            DisconnectInternal();
+            return false;
+        }
+    }
 
-			// 启动收发双异步循环
-			_ = ReceiveLoopAsync(_cts.Token);
-			_ = SendLoopAsync(_cts.Token);
+    private async Task ReceiveLoopAsync(CancellationToken token)
+    {
+        var buffer = new byte[4096];
+        try
+        {
+            while (_ws?.State == WebSocketState.Open && !token.IsCancellationRequested)
+            {
+                var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), token);
+                if (result.MessageType == WebSocketMessageType.Close) break;
 
-			return true;
-		}
-		catch (Exception ex)
-		{
-			//Log($"WS connect failed: {ex.Message}");
-			IsConnecting = false;
-			DisconnectInternal();
-			return false;
-		}
-	}
+                ReceivedCount++;
+                var msg = Encoding.UTF8.GetString(buffer, 0, result.Count);
+            }
+        }
+        catch { }
+        finally
+        {
+            if (_ws?.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                DisconnectInternal();
+            }
+        }
+    }
 
-	private async Task ReceiveLoopAsync(CancellationToken token)
-	{
-		var buffer = new byte[4096];
-		try
-		{
-			while (_ws?.State == WebSocketState.Open && !token.IsCancellationRequested)
-			{
-				var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), token);
-				if (result.MessageType == WebSocketMessageType.Close) break;
+    private async Task SendLoopAsync(CancellationToken token)
+    {
+        while (_ws?.State == WebSocketState.Open && !token.IsCancellationRequested)
+        {
+            if (_sendQueue != null && _sendQueue.TryDequeue(out var msg))
+            {
+                // 抛弃旧帧，只发最新队列尾部的一帧
+                while (_sendQueue.TryDequeue(out var newerMsg))
+                {
+                    msg = newerMsg;
+                }
 
-				ReceivedCount++;
-				var msg = Encoding.UTF8.GetString(buffer, 0, result.Count);
-				//Log($"WS received #{ReceivedCount}: {msg}");
-			}
-		}
-		catch { }
-		finally
-		{
-			if (_ws?.State is WebSocketState.Open or WebSocketState.CloseReceived)
-				DisconnectInternal();
-		}
-	}
+                try
+                {
+                    var bytes = Encoding.UTF8.GetBytes(msg);
+                    await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, token);
+                    SentCount++;
+                }
+                catch { }
 
-	// 核心修复：纯异步发包循环，绝不阻塞 Godot 主线程！
-	private async Task SendLoopAsync(CancellationToken token)
-	{
-		try
-		{
-			while (_ws?.State == WebSocketState.Open && !token.IsCancellationRequested)
-			{
-				if (_sendQueue != null && _sendQueue.TryDequeue(out var msg))
-				{
-					var bytes = Encoding.UTF8.GetBytes(msg);
-					await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, token);
-					SentCount++;
-					
-					// 防洪控制：发送成功后，给 ESP32 芯片预留 20ms 的消化时间 (最高 50Hz 发送率)
-					await Task.Delay(20, token); 
-				}
-				else
-				{
-					// 队列为空时，异步休眠 10ms，让出 CPU 执行权，绝对不卡死画面
-					await Task.Delay(10, token);
-				}
-			}
-		}
-		catch (OperationCanceledException) { }
-		catch (Exception ex)
-		{
-			//Log($"WS Send error: {ex.Message}");
-		}
-	}
+                // 降低发送频率到 30Hz，防止 ESP32 崩溃
+                await Task.Delay(33, token); 
+            }
+            else
+            {
+                await Task.Delay(10, token);
+            }
+        }
+    }
 
-	public void Disconnect()
-	{
-		if (!IsConnected && !IsConnecting) return;
-		IsConnecting = false;
-		DisconnectInternal();
-	}
+    public void Disconnect()
+    {
+        if (!IsConnected && !IsConnecting) return;
+        IsConnecting = false;
+        DisconnectInternal();
+    }
 
-	private void DisconnectInternal()
-	{
-		try { _cts?.Cancel(); } catch { }
+    private void DisconnectInternal()
+    {
+        try { _cts?.Cancel(); } catch { }
 
-		if (_ws?.State == WebSocketState.Open || _ws?.State == WebSocketState.CloseReceived)
-		{
-			try { _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None).GetAwaiter().GetResult(); } catch { }
-		}
+        if (_ws?.State == WebSocketState.Open || _ws?.State == WebSocketState.CloseReceived)
+        {
+            try { _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None).GetAwaiter().GetResult(); } catch { }
+        }
 
-		_ws?.Dispose();
-		_ws = null;
-		
-		// 清空队列
-		if (_sendQueue != null)
-		{
-			while (_sendQueue.TryDequeue(out _)) { }
-		}
-		_sendQueue = null;
-		
-		_cts?.Dispose();
-		_cts = null;
+        _ws?.Dispose();
+        _ws = null;
 
-		if (!_disposed)
-		{
-			OnConnectionChanged?.Invoke(false);
-			//Log("WebSocket disconnected");
-		}
-	}
+        if (_sendQueue != null)
+        {
+            while (_sendQueue.TryDequeue(out _)) { }
+        }
+        _sendQueue = null;
 
-	public void SendPosition(double percentage, int maxPercentage)
-	{
-		if (!IsConnected || _sendQueue == null) return;
+        _cts?.Dispose();
+        _cts = null;
 
-		const int outputMaximum = 999;
-		double scaled = percentage * maxPercentage / 100.0;
-		int value = Math.Clamp((int)(scaled / 100.0 * outputMaximum), 0, outputMaximum);
-		
-		var cmd = $"L0{value:D3}I30\n";
-		
-		// 防止队列无限积压：如果积压过多，抛弃老旧数据，始终让硬件追赶最新画面
-		if (_sendQueue.Count >= 60)
-		{
-			_sendQueue.TryDequeue(out _);
-		}
-		
-		_sendQueue.Enqueue(cmd);
-	}
+        if (!_disposed) OnConnectionChanged?.Invoke(false);
+    }
 
-	private void Log(string message)
-	{
-		OnLog?.Invoke(message);
-	}
+    public void SendPosition(double percentage, int maxPercentage)
+    {
+        if (!IsConnected || _sendQueue == null) return;
 
-	public void Dispose()
-	{
-		_disposed = true;
-		DisconnectInternal();
-	}
+        const int outputMaximum = 999;
+        double scaled = percentage * maxPercentage / 100.0;
+        int value = Math.Clamp((int)(scaled / 100.0 * outputMaximum), 0, outputMaximum);
+
+        // 死区过滤：变动过小不发包
+        if (Math.Abs(value - _lastEnqueuedValue) < MinDeltaThreshold)
+        {
+            return;
+        }
+
+        _lastEnqueuedValue = value;
+
+        // 这里的 I33 配合 33ms 循环，平滑物理过渡
+        var cmd = $"L0{value:D3}I33\n";
+        _sendQueue.Enqueue(cmd);
+    }
+
+    private void Log(string message)
+    {
+        OnLog?.Invoke(message);
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        DisconnectInternal();
+    }
 }

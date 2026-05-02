@@ -1,87 +1,17 @@
-[gd_scene format=3 uid="uid://dq0xqry2dcqoa"]
+[gd_scene load_steps=2 format=3 uid="uid://dq0xqry2dcqoa"]
 
-[ext_resource type="Script" uid="uid://ciahn6vc7uoqm" path="res://Scripts/Main.cs" id="1"]
-[ext_resource type="Script" uid="uid://cr7vwbms8ylk2" path="res://Scripts/UI/UIPointer.cs" id="2"]
+[ext_resource type="Script" path="res://Scripts/Main.cs" id="1_script"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_hand"]
-size = Vector3(0.05, 0.05, 0.1)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_laser"]
-transparency = 1
-shading_mode = 0
-albedo_color = Color(1, 0, 0, 0.5)
-
-[sub_resource type="BoxMesh" id="BoxMesh_laser"]
-material = SubResource("StandardMaterial3D_laser")
-size = Vector3(0.005, 0.005, 1)
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_main"]
-viewport_path = NodePath("SubViewport")
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_main"]
-resource_local_to_scene = true
-shading_mode = 0
-albedo_texture = SubResource("ViewportTexture_main")
-
-[sub_resource type="QuadMesh" id="QuadMesh_main"]
-material = SubResource("StandardMaterial3D_main")
-size = Vector2(1.6, 1.2)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_ui"]
-size = Vector3(1.6, 1.2, 0.05)
-
-[node name="Main3D" type="Node3D" unique_id=576327079]
-
-[node name="XROrigin3D" type="XROrigin3D" parent="." unique_id=1564796766]
-
-[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D" unique_id=1189363826]
-current = true
-
-[node name="LeftHand" type="XRController3D" parent="XROrigin3D" unique_id=1536662622]
-tracker = &"left_hand"
-
-[node name="HandVisual" type="MeshInstance3D" parent="XROrigin3D/LeftHand" unique_id=247049963]
-mesh = SubResource("BoxMesh_hand")
-
-[node name="RightHand" type="XRController3D" parent="XROrigin3D" unique_id=955168652]
-tracker = &"right_hand"
-script = ExtResource("2")
-
-[node name="HandVisual" type="MeshInstance3D" parent="XROrigin3D/RightHand" unique_id=1568673748]
-mesh = SubResource("BoxMesh_hand")
-
-[node name="PointerRay" type="RayCast3D" parent="XROrigin3D/RightHand" unique_id=462908065]
-target_position = Vector3(0, 0, -10)
-collide_with_areas = true
-
-[node name="LaserMesh" type="MeshInstance3D" parent="XROrigin3D/RightHand" unique_id=1600795512]
-mesh = SubResource("BoxMesh_laser")
-
-[node name="UIMesh" type="MeshInstance3D" parent="." unique_id=1531406929]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -2)
-mesh = SubResource("QuadMesh_main")
-
-[node name="StaticBody3D" type="StaticBody3D" parent="UIMesh" unique_id=1550656673]
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="UIMesh/StaticBody3D" unique_id=2006374153]
-shape = SubResource("BoxShape3D_ui")
-
-[node name="SubViewport" type="SubViewport" parent="." unique_id=837662240]
-disable_3d = true
-gui_embed_subwindows = true
-size = Vector2i(800, 600)
-render_target_update_mode = 4
-
-[node name="Main" type="Control" parent="SubViewport" unique_id=1951559878]
+[node name="Main" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1")
+script = ExtResource("1_script")
 
-[node name="Panel" type="PanelContainer" parent="SubViewport/Main" unique_id=747453543]
+[node name="Panel" type="PanelContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -89,163 +19,169 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="SubViewport/Main/Panel" unique_id=1616256699]
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=1968039965]
+[node name="Title" type="Label" parent="Panel/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 text = "VR Player"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=164459871]
+[node name="Subtitle" type="Label" parent="Panel/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
-text = "360° / 180° / Fisheye / Flat  +  Funscript  |  Configure output below"
+text = "360 / 180 / Fisheye / Flat + Funscript | Configure output below"
 horizontal_alignment = 1
 
-[node name="VideoSection" type="HBoxContainer" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=186657948]
+[node name="VideoSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 
-[node name="VideoLabel" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/VideoSection" unique_id=265321998]
+[node name="VideoLabel" type="Label" parent="Panel/VBoxContainer/VideoSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 14
 text = "Video:"
 
-[node name="VideoPath" type="LineEdit" parent="SubViewport/Main/Panel/VBoxContainer/VideoSection" unique_id=980882533]
+[node name="VideoPath" type="LineEdit" parent="Panel/VBoxContainer/VideoSection"]
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Select a video file..."
 editable = false
 
-[node name="BrowseVideoBtn" type="Button" parent="SubViewport/Main/Panel/VBoxContainer/VideoSection" unique_id=486157856]
+[node name="BrowseVideoBtn" type="Button" parent="Panel/VBoxContainer/VideoSection"]
 layout_mode = 2
 text = "Browse..."
 
-[node name="ScriptSection" type="HBoxContainer" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=1091695866]
+[node name="ScriptSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 
-[node name="ScriptLabel" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/ScriptSection" unique_id=314739954]
+[node name="ScriptLabel" type="Label" parent="Panel/VBoxContainer/ScriptSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 14
 text = "Script:"
 
-[node name="ScriptPath" type="LineEdit" parent="SubViewport/Main/Panel/VBoxContainer/ScriptSection" unique_id=513621207]
+[node name="ScriptPath" type="LineEdit" parent="Panel/VBoxContainer/ScriptSection"]
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Auto-matched or select..."
 editable = false
 
-[node name="BrowseScriptBtn" type="Button" parent="SubViewport/Main/Panel/VBoxContainer/ScriptSection" unique_id=935479324]
+[node name="BrowseScriptBtn" type="Button" parent="Panel/VBoxContainer/ScriptSection"]
 layout_mode = 2
 text = "Browse..."
 
-[node name="FormatSection" type="HBoxContainer" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=1069986613]
+[node name="OvershootCb" type="CheckBox" parent="Panel/VBoxContainer/ScriptSection"]
+layout_mode = 2
+button_pressed = true
+text = "Overshoot Curve"
+tooltip_text = "Enable overshoot physics for downwards strokes"
+
+[node name="FormatSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 
-[node name="FormatLabel" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/FormatSection" unique_id=877125654]
+[node name="FormatLabel" type="Label" parent="Panel/VBoxContainer/FormatSection"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Projection:"
 
-[node name="FormatDropdown" type="OptionButton" parent="SubViewport/Main/Panel/VBoxContainer/FormatSection" unique_id=1659826593]
+[node name="FormatDropdown" type="OptionButton" parent="Panel/VBoxContainer/FormatSection"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="SerialSection" type="HBoxContainer" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=1496583453]
+[node name="SerialSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 
-[node name="SerialLabel" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/SerialSection" unique_id=907791395]
+[node name="SerialLabel" type="Label" parent="Panel/VBoxContainer/SerialSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 13
 text = "Serial:"
 
-[node name="SerialPort" type="OptionButton" parent="SubViewport/Main/Panel/VBoxContainer/SerialSection" unique_id=851863361]
+[node name="SerialPort" type="OptionButton" parent="Panel/VBoxContainer/SerialSection"]
 layout_mode = 2
 size_flags_horizontal = 2
 theme_override_font_sizes/font_size = 12
 
-[node name="SerialRefreshBtn" type="Button" parent="SubViewport/Main/Panel/VBoxContainer/SerialSection" unique_id=1437568190]
+[node name="SerialRefreshBtn" type="Button" parent="Panel/VBoxContainer/SerialSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 12
-text = "↻"
+text = "R"
 
-[node name="SerialBaud" type="LineEdit" parent="SubViewport/Main/Panel/VBoxContainer/SerialSection" unique_id=2129982020]
+[node name="SerialBaud" type="LineEdit" parent="Panel/VBoxContainer/SerialSection"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "115200"
 
-[node name="SerialBtn" type="Button" parent="SubViewport/Main/Panel/VBoxContainer/SerialSection" unique_id=2070756552]
+[node name="SerialBtn" type="Button" parent="Panel/VBoxContainer/SerialSection"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "Connect"
 
-[node name="SerialStatus" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/SerialSection" unique_id=1830209441]
+[node name="SerialStatus" type="Label" parent="Panel/VBoxContainer/SerialSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 12
-text = "○"
+text = " "
 
-[node name="WsSection" type="HBoxContainer" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=1351251730]
+[node name="WsSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 
-[node name="WsLabel" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/WsSection" unique_id=1577657389]
+[node name="WsLabel" type="Label" parent="Panel/VBoxContainer/WsSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 13
 text = "WebSocket:"
 
-[node name="WsHost" type="LineEdit" parent="SubViewport/Main/Panel/VBoxContainer/WsSection" unique_id=1015744254]
+[node name="WsHost" type="LineEdit" parent="Panel/VBoxContainer/WsSection"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 12
 text = "192.168.1.100"
 placeholder_text = "192.168.1.100"
 
-[node name="WsPort" type="LineEdit" parent="SubViewport/Main/Panel/VBoxContainer/WsSection" unique_id=1113918398]
+[node name="WsPort" type="LineEdit" parent="Panel/VBoxContainer/WsSection"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "80"
 
-[node name="WsBtn" type="Button" parent="SubViewport/Main/Panel/VBoxContainer/WsSection" unique_id=1288746629]
+[node name="WsBtn" type="Button" parent="Panel/VBoxContainer/WsSection"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "Connect"
 
-[node name="WsStatus" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/WsSection" unique_id=1531861633]
+[node name="WsStatus" type="Label" parent="Panel/VBoxContainer/WsSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 12
-text = "○"
+text = " "
 
-[node name="ActionSection" type="HBoxContainer" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=1914126404]
+[node name="ActionSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 alignment = 1
 
-[node name="LaunchVRBtn" type="Button" parent="SubViewport/Main/Panel/VBoxContainer/ActionSection" unique_id=2134346]
+[node name="LaunchVRBtn" type="Button" parent="Panel/VBoxContainer/ActionSection"]
 layout_mode = 2
 size_flags_horizontal = 0
 text = "Launch VR Player"
 
-[node name="LogSection" type="VBoxContainer" parent="SubViewport/Main/Panel/VBoxContainer" unique_id=236422914]
+[node name="LogSection" type="VBoxContainer" parent="Panel/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="LogTitle" type="Label" parent="SubViewport/Main/Panel/VBoxContainer/LogSection" unique_id=2084228953]
+[node name="LogTitle" type="Label" parent="Panel/VBoxContainer/LogSection"]
 layout_mode = 2
 text = "Log:"
 
-[node name="LogScroll" type="ScrollContainer" parent="SubViewport/Main/Panel/VBoxContainer/LogSection" unique_id=281160560]
+[node name="LogScroll" type="ScrollContainer" parent="Panel/VBoxContainer/LogSection"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="LogLabel" type="RichTextLabel" parent="SubViewport/Main/Panel/VBoxContainer/LogSection/LogScroll" unique_id=1682080210]
+[node name="LogLabel" type="RichTextLabel" parent="Panel/VBoxContainer/LogSection/LogScroll"]
 layout_mode = 2
 scroll_active = false
