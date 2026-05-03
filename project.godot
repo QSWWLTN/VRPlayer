@@ -20,6 +20,10 @@ config/icon="res://icon.svg"
 
 project/assembly_name="VRPlayerProject"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gde_gozen/plugin.cfg", "res://addons/usb_manifest_injector/plugin.cfg")
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
